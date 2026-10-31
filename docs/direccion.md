@@ -140,4 +140,12 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
 
 - **2026-10-31** — Dirección fijada (este archivo). Antes: `progress.md` con el
   estado real verificado (51 tests, ruff limpio) y el plan de sesiones y deuda.
-  Pendiente de arranque: Tarea 1 del plan, validación de nombres de sesión.
+- **2026-10-31** — IA aplazada sin fecha (decisión 3). Tareas 1 a 4 del plan
+  hechas: sesiones con nombre, persistentes por defecto, con selector en la
+  TUI. 103 tests. El historial ya no se pierde al salir.
+- **2026-10-31** — Pedido de estilo del usuario, añadido al plan como Tarea 10:
+  un botón al estilo Burp para ver petición y respuesta **juntas**, con la
+  vista de pestañas de hoy intacta como opción. Primer uso de la tabla `meta`,
+  que estaba en el esquema sin usarse desde la primera versión. A partir de
+  aquí se versiona: la 0.2.0 sale con la Tarea 11, porque cambia un
+  comportamiento por defecto (la 0.1.0 perdía el historial, la 0.2.0 no).

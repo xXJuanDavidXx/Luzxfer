@@ -12,10 +12,11 @@ import threading
 import time
 
 import pytest
-from textual.widgets import DataTable, Static
+from textual.widgets import DataTable, Input, Static
 
 from luzxfer.core.engine import Builtin
 from luzxfer.core.models import Flow, Request, Response
+from luzxfer.core.store import Store
 from luzxfer.core.tools import detector, repeater
 from luzxfer.tui.app import LuzxferApp
 
@@ -310,3 +311,107 @@ async def test_respuestas_largas_se_pueden_desplazar():
         app.screen._mostrar(largo)
         await pilot.pause()
         assert app.screen.query_one("#rep-scroll", VerticalScroll).max_scroll_y > 0
+
+
+# ------------------------------------------- 5. historial que no cabe entero
+def test_count_flows_acepta_los_mismos_filtros_que_list_flows():
+    st = Store()
+    for i in range(6):
+        st.add_flow(Flow(
+            request=Request(method="GET" if i % 2 else "POST",
+                            url=f"http://ej.com/r{i}", headers=[("Host", "ej.com")]),
+            response=Response(status=200 if i < 4 else 500),
+        ))
+    assert st.count_flows() == 6                       # sin filtros: el total
+    assert st.count_flows(metodo="GET") == 3
+    assert st.count_flows(estado="5xx") == 2
+    assert st.count_flows(texto="/r1") == 1
+    st.close()
+
+
+def test_count_flows_y_list_flows_no_se_contradicen():
+    """Comparten el mismo constructor de WHERE a proposito: dos que se
+    separen con el tiempo es como vuelve un conteo que no cuadra con lo
+    que la tabla muestra."""
+    st = Store()
+    for i in range(20):
+        st.add_flow(Flow(
+            request=Request(method="GET" if i % 3 else "POST",
+                            url=f"http://ej.com/r{i}", headers=[("Host", "ej.com")]),
+            response=Response(status=200 if i % 2 else 404),
+        ))
+    for filtros in ({}, {"metodo": "GET"}, {"estado": "4xx"}, {"texto": "r1"},
+                    {"metodo": "POST", "estado": "2xx"}):
+        assert st.count_flows(**filtros) == len(st.list_flows(limite=10_000, **filtros))
+    st.close()
+
+
+def test_mas_flujos_que_el_limite_no_se_pierden_en_silencio():
+    """Antes: refrescar_tabla usaba el limite=1000 por defecto de
+    list_flows sin pasar nada. Con mas de 1000 flujos, filtrar o limpiar
+    dejaba ver solo los 1000 mas recientes, sin decirlo en ninguna parte."""
+    from luzxfer.tui import app as modulo
+
+    st = Store()
+    for i in range(1200):
+        st.add_flow(Flow(
+            request=Request(method="GET", url=f"http://ej.com/r{i}",
+                            headers=[("Host", "ej.com")]),
+            response=Response(status=200),
+        ))
+    assert st.count_flows() == 1200
+    # el limite de la tabla ya no es el default de list_flows
+    assert modulo.LIMITE_TABLA > 1000
+    assert len(st.list_flows(limite=modulo.LIMITE_TABLA)) == 1200
+    st.close()
+
+
+async def test_la_barra_de_estado_avisa_cuando_la_tabla_esta_truncada(monkeypatch):
+    from luzxfer.tui import app as modulo
+    monkeypatch.setattr(modulo, "LIMITE_TABLA", 10)
+
+    app = modulo.LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        for i in range(14):
+            app._ingresar(_f(i))
+        await pilot.pause()
+        app.refrescar_tabla()
+        app.actualizar_estado()
+        await pilot.pause()
+
+        estado = app.query_one("#estado", Static).render().plain
+        assert "14 flujos" in estado
+        assert "mostrando 10 de 14" in estado
+        assert app.query_one("#flujos", DataTable).row_count == 10
+
+
+async def test_sin_truncado_la_barra_no_dice_nada_de_mas(monkeypatch):
+    from luzxfer.tui import app as modulo
+    monkeypatch.setattr(modulo, "LIMITE_TABLA", 10)
+
+    app = modulo.LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        for i in range(3):
+            app._ingresar(_f(i))
+        await pilot.pause()
+        app.actualizar_estado()
+        await pilot.pause()
+        assert "mostrando" not in app.query_one("#estado", Static).render().plain
+
+
+async def test_el_aviso_de_truncado_respeta_el_filtro(monkeypatch):
+    """Con filtro activo, el 'de M' tiene que ser el total FILTRADO, no el
+    total de la sesion: si no, el aviso miente sobre lo que falta."""
+    from luzxfer.tui import app as modulo
+    monkeypatch.setattr(modulo, "LIMITE_TABLA", 5)
+
+    app = modulo.LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        for i in range(20):
+            app._ingresar(_f(i))                    # /r0 .. /r19
+        await pilot.pause()
+        app.query_one("#filtro", Input).value = "/r1"   # r1 y r10..r19 = 11
+        await pilot.pause()
+        app.actualizar_estado()
+        await pilot.pause()
+        assert "mostrando 5 de 11" in app.query_one("#estado", Static).render().plain

@@ -128,19 +128,21 @@ class Store:
             fila = self._con.execute("SELECT * FROM flows WHERE id=?", (fid,)).fetchone()
         return self._fila_a_flow(fila) if fila else None
 
-    def list_flows(
-        self,
-        *,
+    @staticmethod
+    def _where(
         texto: str = "",
         metodo: str = "",
         estado: str = "",
         solo_marcados: bool = False,
-        limite: int = 1000,
-        ascendente: bool = False,
-    ) -> list[Flow]:
-        """Lista para la tabla. Los filtros son los que se usan de verdad:
-        texto en la URL, metodo, familia de codigo de estado."""
-        sql = ["SELECT * FROM flows WHERE 1=1"]
+    ) -> tuple[str, list[object]]:
+        """El WHERE que comparten list_flows y count_flows.
+
+        Uno solo a proposito. Dos constructores de filtro que se separen
+        con el tiempo es exactamente como vuelve un contador que no cuadra
+        con lo que la tabla muestra, y ese desacuerdo es peor que no tener
+        contador: el analista cree que vio todo.
+        """
+        sql = ["WHERE 1=1"]
         args: list[object] = []
         if texto:
             sql.append("AND url LIKE ?")
@@ -158,17 +160,49 @@ class Store:
                 args.append(int(estado))
         if solo_marcados:
             sql.append("AND marked = 1")
-        sql.append("ORDER BY id DESC LIMIT ?")
-        args.append(limite)
+        return " ".join(sql), args
+
+    def list_flows(
+        self,
+        *,
+        texto: str = "",
+        metodo: str = "",
+        estado: str = "",
+        solo_marcados: bool = False,
+        limite: int = 1000,
+        ascendente: bool = False,
+    ) -> list[Flow]:
+        """Lista para la tabla. Los filtros son los que se usan de verdad:
+        texto en la URL, metodo, familia de codigo de estado."""
+        donde, args = self._where(texto, metodo, estado, solo_marcados)
         with self._lock:
-            filas = self._con.execute(" ".join(sql), args).fetchall()
+            filas = self._con.execute(
+                f"SELECT * FROM flows {donde} ORDER BY id DESC LIMIT ?",
+                [*args, limite],
+            ).fetchall()
         flujos = [self._fila_a_flow(f) for f in filas]
         # siempre se toman los N mas recientes; ascendente solo cambia el orden
         return flujos[::-1] if ascendente else flujos
 
-    def count_flows(self) -> int:
+    def count_flows(
+        self,
+        *,
+        texto: str = "",
+        metodo: str = "",
+        estado: str = "",
+        solo_marcados: bool = False,
+    ) -> int:
+        """Cuantos flujos hay. Sin argumentos, el total de la sesion.
+
+        Acepta los mismos filtros que list_flows para poder comparar lo
+        que se muestra con lo que hay, que es de donde sale el aviso de
+        historial truncado.
+        """
+        donde, args = self._where(texto, metodo, estado, solo_marcados)
         with self._lock:
-            return int(self._con.execute("SELECT COUNT(*) c FROM flows").fetchone()["c"])
+            fila = self._con.execute(
+                f"SELECT COUNT(*) c FROM flows {donde}", args).fetchone()
+        return int(fila["c"])
 
     def set_mark(self, fid: int, marcado: bool) -> None:
         with self._lock:

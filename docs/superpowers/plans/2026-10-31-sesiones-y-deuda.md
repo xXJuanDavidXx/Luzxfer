@@ -18,7 +18,7 @@ luzxfer --sesiones      # lista y sale
 
 ## Alcance y orden
 
-El plan tiene dos partes. **La Parte A (tareas 1–5) es software entregable por sí sola**: si se para ahí, el historial ya no se pierde. La Parte B (tareas 6–10) son correcciones independientes entre sí, en el orden en que conviene hacerlas.
+El plan tiene dos partes. **La Parte A (tareas 1–5) es software entregable por sí sola**: si se para ahí, el historial ya no se pierde. La Parte B (tareas 6–11) son correcciones y mejoras independientes entre sí, en el orden en que conviene hacerlas; la 11, documentación, va última porque documenta a las diez anteriores.
 
 El cabo suelto #3 de `progress.md` (truncado silencioso a 1000 flujos) vive en la Parte A, no en la B: es la misma preocupación que las sesiones. Guardar el historial y después no mostrarlo entero es perderlo igual.
 
@@ -963,7 +963,167 @@ git commit -m "chore: borrar el paquete vacio tui/widgets"
 
 ---
 
-## Tarea 10: Documentación honesta
+## Tarea 10: Vista combinada de petición y respuesta
+
+Pedido del usuario el 2026-10-31, durante la ejecución del plan: **lo de
+hoy se queda tal cual y gusta**, pero con un botón al estilo Burp para ver
+petición y respuesta juntas, y el mismo botón para volver.
+
+**Files:**
+- Modify: `src/luzxfer/tui/app.py`
+- Modify: `src/luzxfer/tui/styles.tcss`
+- Modify: `src/luzxfer/core/store.py`
+- Test: `tests/test_tui.py`
+
+**Interfaces:**
+- Produces:
+  - `Store.get_meta(clave: str, defecto: str = "") -> str` y
+    `Store.set_meta(clave: str, valor: str) -> None`. La tabla `meta` existe
+    en el esquema desde la primera versión y **nunca se ha usado**; esta es
+    su primera razón de ser.
+  - `LuzxferApp.vista_combinada: bool` y `action_vista()`, con
+    `Binding("t", "vista", "vista")`.
+  - Botón `id="btn-vista"` en `#barra`, con la etiqueta diciendo el estado
+    actual: `vista: separadas` / `vista: juntas`.
+
+**Cómo, decidido aquí:** no se reparentan widgets ni se reconstruye el
+panel. `compose()` define **cuatro** `TabPane` — `tab-req`, `tab-resp`,
+`tab-ambos` y `tab-hall` — y el modo se cambia con `show_tab()`/`hide_tab()`
+de `TabbedContent`, que es la forma que da el framework. `tab-ambos` es un
+`Horizontal` con dos `VerticalScroll`, uno por lado.
+
+Dos consecuencias buscadas: **la pestaña de candidatos sigue alcanzable en
+los dos modos**, que es lo que se habría roto escondiendo el `TabbedContent`
+entero; y `_pintar_detalle()` escribe en los paneles de los dos modos
+siempre, así que alternar es instantáneo y nunca muestra algo viejo. El
+cuerpo ya viene truncado a 200.000 caracteres, así que pintar dos veces no
+cuesta nada medible.
+
+**La preferencia se guarda** en la tabla `meta` de la sesión: una vista que
+hay que volver a elegir en cada arranque es una molestia diaria. Queda
+por sesión y no global porque `meta` ya está ahí y un archivo de
+configuración global es un subsistema nuevo para un booleano. **Cuando
+aparezca la segunda preferencia global** —el límite de peticiones por
+segundo del DAST, o si la interceptación arranca encendida— esto gradúa a
+`dir_datos()/config`, y entonces se mueve con su propio test.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+async def test_la_tecla_t_alterna_a_vista_combinada():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        assert app.vista_combinada is False
+
+        await pilot.press("t")
+        await pilot.pause()
+        assert app.vista_combinada is True
+        assert app.query_one("#detalle").active == "tab-ambos"
+
+        await pilot.press("t")
+        await pilot.pause()
+        assert app.vista_combinada is False
+        assert app.query_one("#detalle").active == "tab-req"
+
+
+async def test_la_vista_combinada_muestra_peticion_y_respuesta_a_la_vez():
+    app = app_prueba()
+    async with app.run_test(size=(140, 40)) as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.press("t")
+        await pilot.pause()
+        izq = app.query_one("#ambos-req", Static).render().plain
+        der = app.query_one("#ambos-resp", Static).render().plain
+        assert "GET /ruta?q=PRUEBA" in izq
+        assert "buscaste: PRUEBA" in der
+
+
+async def test_los_candidatos_siguen_alcanzables_en_vista_combinada():
+    """Esconder el TabbedContent entero habria dejado la pestana de
+    candidatos inaccesible en el modo nuevo."""
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        app.query_one("#detalle").active = "tab-hall"
+        await pilot.pause()
+        assert app.query_one("#hallazgos", DataTable).row_count > 0
+
+
+async def test_el_boton_alterna_igual_que_la_tecla():
+    from textual.widgets import Button
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        boton = app.query_one("#btn-vista", Button)
+        assert "separadas" in str(boton.label)
+        boton.press()
+        await pilot.pause()
+        assert app.vista_combinada is True
+        assert "juntas" in str(app.query_one("#btn-vista", Button).label)
+
+
+async def test_la_vista_elegida_sobrevive_al_reinicio(tmp_path):
+    ruta = str(tmp_path / "s.db")
+    app = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert app.vista_combinada is True
+
+    otra = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with otra.run_test() as pilot:
+        await pilot.pause()
+        assert otra.vista_combinada is True
+        assert otra.query_one("#detalle").active == "tab-ambos"
+
+
+def test_store_guarda_y_lee_meta(tmp_path):
+    st = Store(tmp_path / "s.db")
+    assert st.get_meta("vista", "separadas") == "separadas"
+    st.set_meta("vista", "juntas")
+    assert st.get_meta("vista") == "juntas"
+    st.set_meta("vista", "separadas")          # sobrescribe, no duplica
+    assert st.get_meta("vista") == "separadas"
+    st.close()
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `./venv/bin/python -m pytest tests/test_tui.py -k "vista or meta or boton" -v`
+Expected: FAIL — `AttributeError: 'LuzxferApp' object has no attribute 'vista_combinada'`
+
+- [ ] **Step 3: Add `tab-ambos`, `action_vista()`, the button, and the `meta` accessors**
+
+`set_meta` va con `INSERT INTO meta ... ON CONFLICT(clave) DO UPDATE`, que
+es lo que hace que sobrescribir no duplique. El estado se lee en `on_mount()`
+y no en `__init__`, porque los widgets todavía no existen ahí.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `./venv/bin/python -m pytest -q`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/luzxfer/tui/app.py src/luzxfer/tui/styles.tcss \
+        src/luzxfer/core/store.py tests/test_tui.py
+git commit -m "feat(tui): vista combinada de peticion y respuesta con t"
+```
+
+---
+
+## Tarea 11: Documentación honesta
 
 Cabo suelto #6. El README manda a `pip install luzxfer`, que no está en PyPI, y el `pyproject.toml` apunta a `github.com/jdavid/luzxfer`, que no es la cuenta de este repo — que además no tiene remoto ni tags. Tres referencias a cosas que no existen, en el primer archivo que alguien lee.
 
@@ -978,9 +1138,11 @@ Cabo suelto #6. El README manda a `pip install luzxfer`, que no está en PyPI, y
 
 En `README.md`, la sección **Install** pasa a instalar desde fuente, y dice en una línea que PyPI llega cuando la 0.1.0 salga. En `pyproject.toml`, `Homepage` e `Issues` apuntan a `github.com/xXJuanDavidXx/luzxfer`.
 
-- [ ] **Step 2: Document sessions and the new keys**
+- [ ] **Step 2: Document sessions, the new keys and the version**
 
-En **Use**, los tres comandos acordados (`luzxfer`, `-s cliente-x`, `--sesiones`), diciendo que **el historial ya no se pierde al salir** y dónde viven las sesiones. En la tabla **Keys**, las tres nuevas: `s` sesiones, `n` nota, `v` confirmar candidato. En el roadmap, marcar sesiones como hecho.
+En **Use**, los tres comandos acordados (`luzxfer`, `-s cliente-x`, `--sesiones`), diciendo que **el historial ya no se pierde al salir** y dónde viven las sesiones. En la tabla **Keys**, las cuatro nuevas: `s` sesiones, `n` nota, `v` confirmar candidato, `t` vista combinada. En el roadmap, marcar sesiones como hecho.
+
+**Subir la versión a `0.2.0`** en `pyproject.toml` y en `src/luzxfer/__init__.py`, que tienen que coincidir. Lo justifica el cambio de comportamiento por defecto: la 0.1.0 perdía el historial al salir y la 0.2.0 lo guarda. Etiquetar con `git tag -a v0.2.0`.
 
 - [ ] **Step 3: Update `progress.md`**
 

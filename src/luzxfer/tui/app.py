@@ -24,6 +24,12 @@ from ..core.tools import detector
 from .screens.repeater import RepeaterScreen
 from .screens.sesiones import SesionesScreen
 
+# Cuantos flujos se pintan en la tabla al reconstruirla. No es un limite
+# del almacen: el historial completo sigue en la sesion y se puede filtrar
+# para llegar a el. Existe porque pintar decenas de miles de filas de golpe
+# cuesta, y cuando recorta se dice en la barra de estado.
+LIMITE_TABLA = 5000
+
 COLOR_ESTADO = {2: "#6fcf8f", 3: "#5fa8d3", 4: "#f0a93b", 5: "#e05c5c"}
 COLOR_METODO = {
     "GET": "#5fa8d3", "POST": "#f0a93b", "PUT": "#c99bf0",
@@ -220,7 +226,8 @@ class LuzxferApp(App):
         tabla = self.query_one("#flujos", DataTable)
         elegido = self._flujo_actual.id if self._flujo_actual else None
         tabla.clear()
-        for f in self.store.list_flows(texto=self._filtro, ascendente=True):
+        for f in self.store.list_flows(texto=self._filtro, ascendente=True,
+                                       limite=LIMITE_TABLA):
             self._agregar_fila(tabla, f)
         if tabla.row_count:
             fila = tabla.row_count - 1
@@ -242,13 +249,22 @@ class LuzxferApp(App):
             motor = f"{self.host_proxy}:{self.port_proxy}"
         n = self.store.count_flows()
         c = self.store.count_findings()
-        self.query_one("#estado", Static).update(
-            Text.assemble(
-                (f"{n} flujos", "#d9dde5"), ("  ·  ", "#39404f"),
-                (f"{c} candidatos", "#f0a93b"), ("  ·  ", "#39404f"),
-                (motor, "#6fcf8f" if self.engine and self.engine.running else "#e05c5c"),
-            )
-        )
+        piezas = [
+            (f"{n} flujo{'' if n == 1 else 's'}", "#d9dde5"), ("  ·  ", "#39404f"),
+            (f"{c} candidato{'' if c == 1 else 's'}", "#f0a93b"), ("  ·  ", "#39404f"),
+        ]
+
+        # si la tabla no alcanza a mostrar todo lo que hay, decirlo. Callarlo
+        # es hacerle creer al analista que ya vio el historial entero.
+        mostrados = self.query_one("#flujos", DataTable).row_count
+        total = self.store.count_flows(texto=self._filtro) if self._filtro else n
+        if mostrados < total:
+            piezas += [(f"mostrando {mostrados} de {total}", "#e05c5c"),
+                       ("  ·  ", "#39404f")]
+
+        piezas.append(
+            (motor, "#6fcf8f" if self.engine and self.engine.running else "#e05c5c"))
+        self.query_one("#estado", Static).update(Text.assemble(*piezas))
 
     # ------------------------------------------------------------------
     def on_data_table_row_highlighted(self, ev: DataTable.RowHighlighted) -> None:
@@ -290,6 +306,7 @@ class LuzxferApp(App):
         if ev.input.id == "filtro":
             self._filtro = ev.value.strip()
             self.refrescar_tabla()
+            self.actualizar_estado()       # el aviso de truncado depende del filtro
 
     def on_input_submitted(self, ev: Input.Submitted) -> None:
         if ev.input.id == "filtro":
