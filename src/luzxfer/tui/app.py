@@ -71,6 +71,7 @@ class LuzxferApp(App):
         self,
         *,
         db: str = ":memory:",
+        sesion: str = "",
         host: str = "127.0.0.1",
         port: int = 8080,
         upstream: str | None = None,
@@ -78,6 +79,10 @@ class LuzxferApp(App):
     ):
         super().__init__()
         self.store = Store(db)
+        self.sesion = sesion
+        if sesion:
+            # en el encabezado, para no confundir dos sesiones abiertas a la vez
+            self.sub_title = sesion
         self.host_proxy = host
         self.port_proxy = port
         self.upstream = upstream

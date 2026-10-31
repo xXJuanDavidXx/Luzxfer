@@ -231,3 +231,124 @@ def test_listar_funciona_con_el_directorio_de_solo_lectura(monkeypatch, tmp_path
         assert r[0].flujos == 4
     finally:
         base.chmod(0o700)
+
+
+# ------------------------------------------------- retomar la ultima sesion
+def test_abrir_sin_nombre_usa_el_default_la_primera_vez(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    nombre, ruta = sesiones.abrir(None)
+    assert nombre == sesiones.NOMBRE_DEFECTO
+    assert ruta.parent.is_dir()
+    assert ruta.name == f"{sesiones.NOMBRE_DEFECTO}.db"
+
+
+def test_abrir_no_crea_el_archivo_todavia(monkeypatch, tmp_path):
+    """Crear el .db es de Store al conectarse, no de abrir()."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _, ruta = sesiones.abrir("nueva")
+    assert not ruta.exists()
+
+
+def test_abrir_recuerda_y_retoma_la_ultima(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    sesiones.abrir("cliente-x")
+    _sesion("cliente-x")                              # que exista en disco
+    assert sesiones.ultima() == "cliente-x"
+    assert sesiones.abrir(None)[0] == "cliente-x"
+
+
+def test_un_nombre_explicito_gana_sobre_la_ultima(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    sesiones.abrir("cliente-x")
+    _sesion("cliente-x")
+    assert sesiones.abrir("lab-dvwa")[0] == "lab-dvwa"
+    _sesion("lab-dvwa")
+    assert sesiones.ultima() == "lab-dvwa"
+
+
+def test_abrir_rechaza_un_nombre_invalido(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    with pytest.raises(sesiones.NombreInvalido):
+        sesiones.abrir("../fuera")
+
+
+def test_ultima_borrada_no_rompe_el_arranque(monkeypatch, tmp_path):
+    """Review Focus 3: el puntero sobrevive a la sesion que nombra."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    sesiones.abrir("efimera")
+    _sesion("efimera")
+    sesiones.borrar("efimera")
+    assert sesiones.ultima() is None
+    assert sesiones.abrir(None)[0] == sesiones.NOMBRE_DEFECTO
+
+
+def test_ultima_con_contenido_basura_se_ignora(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    sesiones.dir_datos().mkdir(parents=True, exist_ok=True)
+    (sesiones.dir_datos() / "ultima").write_text("../../etc/passwd")
+    assert sesiones.ultima() is None
+
+
+def test_ultima_tolera_el_salto_de_linea(monkeypatch, tmp_path):
+    """Un echo > ultima deja un \\n y no por eso se pierde la sesion."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("cliente-x")
+    (sesiones.dir_datos() / "ultima").write_text("cliente-x\n")
+    assert sesiones.ultima() == "cliente-x"
+
+
+def test_ultima_sin_puntero_es_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    assert sesiones.ultima() is None
+
+
+# --------------------------------------------------------------------- CLI
+def test_cli_nombre_invalido_sale_con_2_y_mensaje(monkeypatch, tmp_path, capsys):
+    from luzxfer.__main__ import main
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    assert main(["-s", "../fuera", "--no-engine"]) == 2
+    assert "nombre de sesion" in capsys.readouterr().err.lower()
+
+
+def test_cli_directorio_no_escribible_explica_y_no_revienta(monkeypatch, tmp_path, capsys):
+    """Review Focus 4: mensaje claro, no un traceback."""
+    from luzxfer.__main__ import main
+
+    bloqueado = tmp_path / "bloqueado"
+    bloqueado.mkdir()
+    bloqueado.chmod(0o500)
+    monkeypatch.setenv("XDG_DATA_HOME", str(bloqueado))
+    try:
+        assert main(["--no-engine"]) == 2
+        assert "no se pudo" in capsys.readouterr().err.lower()
+    finally:
+        bloqueado.chmod(0o700)
+
+
+def test_cli_sesiones_lista_y_sale(monkeypatch, tmp_path, capsys):
+    from luzxfer.__main__ import main
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("cliente-x", n_flujos=2)
+    assert main(["--sesiones"]) == 0
+    salida = capsys.readouterr().out
+    assert "cliente-x" in salida and "2" in salida
+
+
+def test_cli_sesiones_sin_ninguna_lo_dice(monkeypatch, tmp_path, capsys):
+    from luzxfer.__main__ import main
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    assert main(["--sesiones"]) == 0
+    assert "no hay sesiones" in capsys.readouterr().out.lower()
+
+
+def test_cli_sesiones_marca_la_ilegible(monkeypatch, tmp_path, capsys):
+    from luzxfer.__main__ import main
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("buena", n_flujos=1)
+    sesiones.dir_sesiones().joinpath("rota.db").write_bytes(b"no soy sqlite")
+    assert main(["--sesiones"]) == 0
+    assert "ilegible" in capsys.readouterr().out.lower()

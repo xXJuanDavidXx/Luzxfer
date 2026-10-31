@@ -22,6 +22,10 @@ from pathlib import Path
 NOMBRE_DEFECTO = "predeterminada"
 LARGO_MAXIMO = 64
 
+# Puntero a la ultima sesion abierta. Va junto a dir_sesiones(), no dentro,
+# porque es estado global y no una sesion mas.
+_ARCHIVO_ULTIMA = "ultima"
+
 # Letras, digitos, punto, guion bajo y guion, empezando por letra o digito.
 # Sin '/' ni '\' ni bytes nulos no hay traversal posible, y exigir que el
 # primer caracter sea alfanumerico descarta '..' y los ocultos de un golpe.
@@ -141,6 +145,49 @@ def listar() -> list[ResumenSesion]:
     salida = [resumen(p) for p in base.glob("*.db") if p.is_file()]
     salida.sort(key=lambda s: s.modificada, reverse=True)
     return salida
+
+
+def ultima() -> str | None:
+    """El nombre de la ultima sesion abierta, si todavia existe.
+
+    None si el puntero no esta, si tiene basura o si nombra una sesion ya
+    borrada. El puntero sobrevive al archivo que nombra, y que haya
+    quedado huerfano no es razon para no poder arrancar.
+    """
+    try:
+        crudo = (dir_datos() / _ARCHIVO_ULTIMA).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        nombre = valida_nombre(crudo)          # tambien quita el salto de linea
+    except NombreInvalido:
+        return None
+    return nombre if ruta_de(nombre).is_file() else None
+
+
+def recordar_ultima(nombre: str) -> None:
+    """Anota cual fue la ultima sesion abierta."""
+    nombre = valida_nombre(nombre)
+    base = dir_datos()
+    base.mkdir(parents=True, exist_ok=True)
+    (base / _ARCHIVO_ULTIMA).write_text(nombre, encoding="utf-8")
+
+
+def abrir(nombre: str | None = None) -> tuple[str, Path]:
+    """Decide que sesion usar, prepara el directorio y la recuerda.
+
+    Sin nombre explicito retoma la ultima; si no hay ninguna, el nombre
+    por defecto. No crea el archivo de la sesion: eso es de Store al
+    conectarse, y asi una sesion recien nombrada no deja un .db vacio si
+    el usuario se arrepiente.
+
+    Puede lanzar NombreInvalido, u OSError si el directorio no se puede
+    crear. Las dos las traduce __main__ a un mensaje y un codigo de salida.
+    """
+    efectivo = valida_nombre(nombre) if nombre else (ultima() or NOMBRE_DEFECTO)
+    dir_sesiones().mkdir(parents=True, exist_ok=True)
+    recordar_ultima(efectivo)
+    return efectivo, ruta_de(efectivo)
 
 
 def borrar(nombre: str) -> None:
