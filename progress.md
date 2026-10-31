@@ -110,6 +110,25 @@ El orden y su razonamiento están en `docs/direccion.md`. Resumido:
 
 ---
 
+## Pedido por el usuario, pendiente
+
+Detectado probando la 0.2.0 contra OWASP Juice Shop el **2026-10-31**. Se
+atiende cuando mejor encaje con el desarrollo, no de inmediato.
+
+1. **Pestañas del repeater.** Hoy es un modal que pierde el estado al
+   cerrarlo. Burp guarda una pestaña numerada por petición, con su respuesta,
+   y las conserva. Encaja natural después del Intruder, porque las dos
+   pantallas quieren lo mismo: guardar trabajo en curso dentro de la sesión.
+2. **Seguir redirecciones, pero solo en el repeater.** En el proxy sería un
+   error —escondería lo que el servidor contestó— y Burp tampoco lo hace ahí.
+   En el repeater es una opción útil y pequeña; va con el punto 1.
+3. **Mostrar los binarios como binarios.** Una respuesta `font/woff` de 40 KB
+   se pinta como 40 KB de basura. **No es un fallo de decodificación** —el
+   usuario ya sospechó que era un falso positivo y acertó—, es un archivo
+   binario mostrado como texto. Debería decir `40.904 bytes de font/woff
+   (binario)` y ofrecer un volcado hexadecimal, en vez de llenar el panel.
+   Mismo principio que el aviso de brotli: si no se puede leer, decirlo.
+
 ## Deuda conocida que sigue abierta
 
 1. **Cambiar de sesión en caliente no está implementado.** Elegir otra en el

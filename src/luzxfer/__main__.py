@@ -61,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
                          "defecto se le quita lo que luzxfer no sabe deshacer "
                          "(brotli y zstd), porque si no el detector se queda "
                          "ciego buscando reflejos en bytes comprimidos")
+    ap.add_argument("--conservar-cache", action="store_true",
+                    help="no quitar If-None-Match ni If-Modified-Since. Por "
+                         "defecto se quitan, porque con ellos el servidor "
+                         "contesta 304 sin cuerpo y no hay nada que analizar. "
+                         "Conservalos para probar envenenamiento de cache")
     ap.add_argument("--no-engine", action="store_true",
                     help="no arrancar el proxy: solo revisar una sesion guardada")
     ap.add_argument("--version", action="store_true")
@@ -111,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         host=a.host, port=a.port, upstream=a.upstream,
         arrancar_motor=not a.no_engine,
         filtrar_encoding=not a.conservar_encoding,
+        filtrar_cache=not a.conservar_cache,
     )
     app.run()
     return 0

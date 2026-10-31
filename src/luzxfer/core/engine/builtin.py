@@ -21,7 +21,14 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from ..models import HOP_BY_HOP, Flow, Request, Response, filtrar_accept_encoding
+from ..models import (
+    HOP_BY_HOP,
+    VALIDADORES_CACHE,
+    Flow,
+    Request,
+    Response,
+    filtrar_accept_encoding,
+)
 from .base import Engine, EngineInfo
 
 AVISO_CONNECT = (
@@ -82,6 +89,10 @@ class _Handler(BaseHTTPRequestHandler):
         salida: list[tuple[str, str]] = []
         for k, v in self.headers.items():        # items() conserva duplicados
             if k.lower() in HOP_BY_HOP or k.lower() == "content-length":
+                continue
+            if k.lower() in VALIDADORES_CACHE and self.engine.filtrar_cache:
+                # con el validador puesto el servidor contesta 304 sin
+                # cuerpo, y entonces no hay nada que mirar ni que analizar
                 continue
             if k.lower() == "host":
                 v = f"{destino[0]}:{destino[1]}" if destino[1] != 80 else destino[0]
@@ -155,14 +166,28 @@ class Builtin(Engine):
     """Motor integrado. `upstream` activa el modo inverso."""
 
     def __init__(self, on_flow, *, host="127.0.0.1", port=8080,
-                 upstream: str | None = None, filtrar_encoding: bool = True):
-        """`filtrar_encoding` recorta el Accept-Encoding del cliente a lo
-        que luzxfer sabe deshacer. Encendido por defecto porque un cuerpo
-        en brotli deja al detector ciego; se apaga para quien este
-        probando justamente como responde el servidor a cada codificacion."""
+                 upstream: str | None = None, filtrar_encoding: bool = True,
+                 filtrar_cache: bool = True):
+        """Dos retoques a la peticion, los dos encendidos por defecto y los
+        dos por el mismo motivo: sin ellos llegan cuerpos que no se pueden
+        leer, y un cuerpo ilegible es un detector ciego que no lo dice.
+
+        `filtrar_encoding` recorta el Accept-Encoding a lo que luzxfer sabe
+        deshacer. Se apaga para probar como responde el servidor a cada
+        codificacion.
+
+        `filtrar_cache` quita If-None-Match e If-Modified-Since, que hacen
+        que el servidor conteste 304 sin cuerpo. Se apaga para probar
+        envenenamiento de cache o cache deception, donde esas cabeceras son
+        el objeto de la prueba y no un estorbo.
+
+        Van en dos interruptores y no en uno porque esos dos casos de uso
+        son independientes: se puede querer brotli fuera y la cache intacta.
+        """
         super().__init__(on_flow, host=host, port=port)
         self.upstream = upstream
         self.filtrar_encoding = filtrar_encoding
+        self.filtrar_cache = filtrar_cache
         self._srv: ThreadingHTTPServer | None = None
         self._hilo: threading.Thread | None = None
 

@@ -18,6 +18,15 @@ HOP_BY_HOP = frozenset({
     "te", "trailers", "transfer-encoding", "upgrade",
 })
 
+# Cabeceras con las que el cliente dice «ya tengo una copia». El servidor
+# contesta 304 sin cuerpo, y un cuerpo vacio es un detector ciego: busca
+# reflejos en la nada y devuelve cero sin explicar por que. En un pentest
+# esto pasa en cada recarga, no es un caso raro.
+#
+# No se tocan If-Range (da 206, otro problema) ni Cache-Control, que el
+# analista puede querer para otras cosas.
+VALIDADORES_CACHE = frozenset({"if-none-match", "if-modified-since"})
+
 try:                                    # extra opcional: pip install luzxfer[br]
     import brotli as _brotli
 except ImportError:

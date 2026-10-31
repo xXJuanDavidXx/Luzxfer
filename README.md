@@ -132,7 +132,37 @@ that makes scanner output useless.
 You confirm, with `v`. That is the line between a candidate and a finding,
 and nothing but a human crosses it.
 
-## Compression
+## What the proxy rewrites
+
+Two headers, both on by default, both for the same reason: without them
+bodies arrive that cannot be read, and **a body the detector cannot read is
+a detector that finds nothing and does not say why.** Each has its own
+switch, because the reasons to want them back are independent.
+
+### Cache validators
+
+A browser that already has the page sends `If-None-Match` or
+`If-Modified-Since`, the server answers `304 Not Modified`, and the body is
+empty. On a real target this happens on every reload, so a great deal of
+your history ends up as 304s with nothing in them — and the detector scores
+zero on all of it.
+
+So the proxy drops those two headers. Measured against OWASP Juice Shop:
+
+```
+with the validator:     304 Not Modified      0 bytes    0 candidates
+validator dropped:      200 OK             9984 bytes    1 candidate
+```
+
+`--conservar-cache` keeps them, which is what you want when cache poisoning
+or cache deception is the thing you are testing — there those headers are
+the experiment, not an obstacle.
+
+**The proxy does not follow redirects, and that is deliberate.** A `30x` is
+shown exactly as the server sent it; following it would hide the response
+you came to look at. The browser follows them, as it would anyway.
+
+### Compression
 
 The detector reads the *decoded* body, because searching for a reflection in
 gzip bytes finds nothing. gzip and deflate are standard library. Brotli is

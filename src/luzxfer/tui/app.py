@@ -90,9 +90,11 @@ class LuzxferApp(App):
         upstream: str | None = None,
         arrancar_motor: bool = True,
         filtrar_encoding: bool = True,
+        filtrar_cache: bool = True,
     ):
         super().__init__()
         self.filtrar_encoding = filtrar_encoding
+        self.filtrar_cache = filtrar_cache
         self.store = Store(db)
         self.sesion = sesion
         if sesion:
@@ -212,6 +214,7 @@ class LuzxferApp(App):
             self._flujo_desde_hilo,
             host=self.host_proxy, port=self.port_proxy, upstream=self.upstream,
             filtrar_encoding=self.filtrar_encoding,
+            filtrar_cache=self.filtrar_cache,
         )
         self.engine.start()
         destino = f" → {self.upstream}" if self.upstream else ""

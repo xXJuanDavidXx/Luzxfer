@@ -533,3 +533,48 @@ async def test_gzip_no_genera_aviso_porque_si_se_decodifica():
         await pilot.pause()
         panel = app.query_one("#panel-resp", Static).render().plain
         assert "hola" in panel and "sin decodificar" not in panel
+
+
+# ------------------------------------------- 7. validadores de cache (304)
+def test_el_proxy_quita_los_validadores_de_cache(eco):
+    """Un navegador con la pagina en cache manda If-None-Match y el
+    servidor contesta 304 sin cuerpo. El detector busca reflejos en un
+    cuerpo vacio y devuelve cero: mismo falso negativo silencioso que
+    brotli, y en un pentest pasa en cada recarga."""
+    datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                            b'If-None-Match: W/"abc123"\r\n'
+                            b"If-Modified-Since: Sat, 31 Oct 2026 21:45:30 GMT\r\n"
+                            b"Connection: close\r\n\r\n")
+    vistas = {k.lower() for k, _ in datos["cabeceras"]}
+    assert "if-none-match" not in vistas
+    assert "if-modified-since" not in vistas
+    assert "host" in vistas                      # lo demas sigue pasando
+
+
+def test_se_pueden_conservar_para_probar_cache_poisoning(eco):
+    """Quien este probando envenenamiento o cache deception necesita que
+    las cabeceras de cache lleguen intactas: ahi son el objeto de la
+    prueba, no un estorbo."""
+    import socket
+    h, p = eco
+    motor = Builtin(lambda f: None, port=0, upstream=f"http://{h}:{p}",
+                    filtrar_cache=False)
+    motor.start()
+    puerto = motor._srv.server_address[1]
+    try:
+        s = socket.create_connection(("127.0.0.1", puerto), timeout=10)
+        s.sendall(b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                  b'If-None-Match: W/"abc123"\r\nConnection: close\r\n\r\n')
+        r = http.client.HTTPResponse(s)
+        r.begin()
+        datos = json.loads(r.read())
+        s.close()
+    finally:
+        motor.stop()
+    assert any(k.lower() == "if-none-match" for k, _ in datos["cabeceras"])
+
+
+def test_una_peticion_sin_validadores_no_cambia(eco):
+    datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                            b"X-Propia: valor\r\nConnection: close\r\n\r\n")
+    assert any(k == "X-Propia" and v == "valor" for k, v in datos["cabeceras"])
