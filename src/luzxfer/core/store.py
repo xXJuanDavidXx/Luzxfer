@@ -1,0 +1,254 @@
+"""Almacen en SQLite.
+
+Es lo que permite cerrar la sesion, volver al dia siguiente y seguir donde
+ibas, y lo que hace posible generar el reporte al final sin haber copiado
+capturas a mano. Sin esto la herramienta seria un visor de trafico volatil.
+
+Se usa sqlite3 de la stdlib a proposito: cero dependencias nativas, que es
+lo que mantiene el proyecto instalable en Termux.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+import threading
+from pathlib import Path
+
+from .models import Finding, Flow, Request, Response
+
+ESQUEMA = """
+PRAGMA journal_mode=WAL;
+
+CREATE TABLE IF NOT EXISTS flows (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    started       REAL    NOT NULL,
+    duration_ms   INTEGER NOT NULL DEFAULT 0,
+    source        TEXT    NOT NULL DEFAULT 'proxy',
+    method        TEXT    NOT NULL,
+    url           TEXT    NOT NULL,
+    host          TEXT    NOT NULL,
+    path          TEXT    NOT NULL,
+    req_version   TEXT    NOT NULL DEFAULT 'HTTP/1.1',
+    req_headers   TEXT    NOT NULL DEFAULT '[]',
+    req_body      BLOB,
+    status        INTEGER,
+    reason        TEXT    NOT NULL DEFAULT '',
+    resp_version  TEXT    NOT NULL DEFAULT 'HTTP/1.1',
+    resp_headers  TEXT    NOT NULL DEFAULT '[]',
+    resp_body     BLOB,
+    content_type  TEXT    NOT NULL DEFAULT '',
+    size          INTEGER NOT NULL DEFAULT 0,
+    note          TEXT    NOT NULL DEFAULT '',
+    marked        INTEGER NOT NULL DEFAULT 0,
+    error         TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS ix_flows_started ON flows(started DESC);
+CREATE INDEX IF NOT EXISTS ix_flows_host    ON flows(host);
+CREATE INDEX IF NOT EXISTS ix_flows_status  ON flows(status);
+
+CREATE TABLE IF NOT EXISTS findings (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    created       REAL    NOT NULL,
+    kind          TEXT    NOT NULL,
+    detail        TEXT    NOT NULL,
+    url           TEXT    NOT NULL,
+    flow_ids      TEXT    NOT NULL DEFAULT '[]',
+    wstg          TEXT    NOT NULL DEFAULT '[]',
+    severity      TEXT    NOT NULL DEFAULT '',
+    cvss_vector   TEXT    NOT NULL DEFAULT '',
+    justification TEXT    NOT NULL DEFAULT '',
+    confirmed     INTEGER NOT NULL DEFAULT 0,
+    extra         TEXT    NOT NULL DEFAULT '{}',
+    UNIQUE(kind, detail, url)
+);
+
+CREATE TABLE IF NOT EXISTS meta (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL
+);
+"""
+
+
+def _cab(texto: str) -> list[tuple[str, str]]:
+    return [(k, v) for k, v in json.loads(texto)]
+
+
+class Store:
+    def __init__(self, ruta: str | Path = ":memory:"):
+        self.ruta = str(ruta)
+        if self.ruta != ":memory:":
+            Path(self.ruta).parent.mkdir(parents=True, exist_ok=True)
+        # check_same_thread=False + lock: el motor escribe desde hilos y la
+        # TUI lee desde el bucle de asyncio.
+        self._con = sqlite3.connect(self.ruta, check_same_thread=False)
+        self._con.row_factory = sqlite3.Row
+        self._lock = threading.RLock()
+        with self._lock:
+            self._con.executescript(ESQUEMA)
+            self._con.commit()
+
+    def close(self) -> None:
+        with self._lock:
+            self._con.close()
+
+    # ------------------------------------------------------------------
+    def add_flow(self, flow: Flow) -> int:
+        r, p = flow.request, flow.response
+        with self._lock:
+            cur = self._con.execute(
+                "INSERT INTO flows (started, duration_ms, source, method, url, host, path,"
+                " req_version, req_headers, req_body, status, reason, resp_version,"
+                " resp_headers, resp_body, content_type, size, note, marked, error)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    flow.started, flow.duration_ms, flow.source,
+                    r.method, r.url, r.host, r.path,
+                    r.http_version, json.dumps(r.headers), r.body,
+                    p.status if p else None,
+                    p.reason if p else "",
+                    p.http_version if p else "HTTP/1.1",
+                    json.dumps(p.headers) if p else "[]",
+                    p.body if p else None,
+                    p.content_type if p else "",
+                    len(p.body) if p else 0,
+                    flow.note, int(flow.marked), flow.error,
+                ),
+            )
+            self._con.commit()
+            flow.id = int(cur.lastrowid)
+            return flow.id
+
+    def get_flow(self, fid: int) -> Flow | None:
+        with self._lock:
+            fila = self._con.execute("SELECT * FROM flows WHERE id=?", (fid,)).fetchone()
+        return self._fila_a_flow(fila) if fila else None
+
+    def list_flows(
+        self,
+        *,
+        texto: str = "",
+        metodo: str = "",
+        estado: str = "",
+        solo_marcados: bool = False,
+        limite: int = 1000,
+    ) -> list[Flow]:
+        """Lista para la tabla. Los filtros son los que se usan de verdad:
+        texto en la URL, metodo, familia de codigo de estado."""
+        sql = ["SELECT * FROM flows WHERE 1=1"]
+        args: list[object] = []
+        if texto:
+            sql.append("AND url LIKE ?")
+            args.append(f"%{texto}%")
+        if metodo:
+            sql.append("AND method = ?")
+            args.append(metodo.upper())
+        if estado:
+            if estado.endswith("xx") and estado[0].isdigit():
+                lo = int(estado[0]) * 100
+                sql.append("AND status >= ? AND status < ?")
+                args += [lo, lo + 100]
+            elif estado.isdigit():
+                sql.append("AND status = ?")
+                args.append(int(estado))
+        if solo_marcados:
+            sql.append("AND marked = 1")
+        sql.append("ORDER BY id DESC LIMIT ?")
+        args.append(limite)
+        with self._lock:
+            filas = self._con.execute(" ".join(sql), args).fetchall()
+        return [self._fila_a_flow(f) for f in filas]
+
+    def count_flows(self) -> int:
+        with self._lock:
+            return int(self._con.execute("SELECT COUNT(*) c FROM flows").fetchone()["c"])
+
+    def set_mark(self, fid: int, marcado: bool) -> None:
+        with self._lock:
+            self._con.execute("UPDATE flows SET marked=? WHERE id=?", (int(marcado), fid))
+            self._con.commit()
+
+    def set_note(self, fid: int, nota: str) -> None:
+        with self._lock:
+            self._con.execute("UPDATE flows SET note=? WHERE id=?", (nota, fid))
+            self._con.commit()
+
+    def clear_flows(self) -> None:
+        with self._lock:
+            self._con.execute("DELETE FROM flows")
+            self._con.commit()
+
+    def hosts(self) -> list[str]:
+        with self._lock:
+            filas = self._con.execute(
+                "SELECT DISTINCT host FROM flows ORDER BY host").fetchall()
+        return [f["host"] for f in filas]
+
+    # ------------------------------------------------------------------
+    def add_finding(self, hallazgo: Finding) -> int | None:
+        """Devuelve el id, o None si ya existia (UNIQUE kind+detail+url).
+
+        Esa restriccion es lo que evita el ruido de scanner: el mismo
+        hallazgo en la misma URL no se repite.
+        """
+        with self._lock:
+            cur = self._con.execute(
+                "INSERT OR IGNORE INTO findings (created, kind, detail, url, flow_ids,"
+                " wstg, severity, cvss_vector, justification, confirmed, extra)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    hallazgo.created, hallazgo.kind, hallazgo.detail, hallazgo.url,
+                    json.dumps(hallazgo.flow_ids), json.dumps(hallazgo.wstg),
+                    hallazgo.severity, hallazgo.cvss_vector, hallazgo.justification,
+                    int(hallazgo.confirmed), json.dumps(hallazgo.extra),
+                ),
+            )
+            self._con.commit()
+            if cur.rowcount == 0:
+                return None
+            hallazgo.id = int(cur.lastrowid)
+            return hallazgo.id
+
+    def list_findings(self, *, kind: str = "") -> list[Finding]:
+        sql = "SELECT * FROM findings"
+        args: list[object] = []
+        if kind:
+            sql += " WHERE kind = ?"
+            args.append(kind)
+        sql += " ORDER BY id DESC"
+        with self._lock:
+            filas = self._con.execute(sql, args).fetchall()
+        return [
+            Finding(
+                id=f["id"], created=f["created"], kind=f["kind"], detail=f["detail"],
+                url=f["url"], flow_ids=json.loads(f["flow_ids"]),
+                wstg=json.loads(f["wstg"]), severity=f["severity"],
+                cvss_vector=f["cvss_vector"], justification=f["justification"],
+                confirmed=bool(f["confirmed"]), extra=json.loads(f["extra"]),
+            )
+            for f in filas
+        ]
+
+    def count_findings(self) -> int:
+        with self._lock:
+            return int(self._con.execute("SELECT COUNT(*) c FROM findings").fetchone()["c"])
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _fila_a_flow(f: sqlite3.Row) -> Flow:
+        req = Request(
+            method=f["method"], url=f["url"], http_version=f["req_version"],
+            headers=_cab(f["req_headers"]), body=bytes(f["req_body"] or b""),
+        )
+        resp = None
+        if f["status"] is not None:
+            resp = Response(
+                status=int(f["status"]), reason=f["reason"],
+                http_version=f["resp_version"], headers=_cab(f["resp_headers"]),
+                body=bytes(f["resp_body"] or b""),
+            )
+        return Flow(
+            id=f["id"], request=req, response=resp, started=f["started"],
+            duration_ms=f["duration_ms"], source=f["source"], note=f["note"],
+            marked=bool(f["marked"]), error=f["error"],
+        )
