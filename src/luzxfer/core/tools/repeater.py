@@ -8,9 +8,11 @@ el error numero uno.
 from __future__ import annotations
 
 import http.client
+import socket
+import ssl
 import time
 
-from ..models import HOP_BY_HOP, Flow, Request, Response
+from ..models import Flow, Request, Response
 
 
 class ErrorPeticion(ValueError):
@@ -55,15 +57,32 @@ def destino_de(cabeceras: list[tuple[str, str]]) -> tuple[str, int] | None:
     return None
 
 
+def build_raw(
+    metodo: str, ruta: str, version: str,
+    cabeceras: list[tuple[str, str]], cuerpo: bytes,
+) -> bytes:
+    """Los bytes exactos que viajan. Orden y duplicados de cabeceras se
+    conservan: mandar dos veces la misma cabecera es una tecnica de prueba."""
+    lineas = [f"{metodo} {ruta} {version}"] + [f"{k}: {v}" for k, v in cabeceras]
+    return ("\r\n".join(lineas) + "\r\n\r\n").encode("latin-1", "replace") + cuerpo
+
+
 def send_raw(
     texto: str,
     *,
     host: str | None = None,
     port: int | None = None,
+    tls: bool | None = None,
     recalcular_cl: bool = True,
     timeout: float = 30.0,
 ) -> Flow:
-    """Manda la peticion y devuelve el Flow, con error dentro si fallo."""
+    """Manda la peticion y devuelve el Flow, con error dentro si fallo.
+
+    Va por socket crudo, no por http.client: esa libreria normaliza la
+    peticion (agrega Accept-Encoding, colapsa cabeceras duplicadas, rechaza
+    valores que no le gustan), y un repeater que corrige lo que escribes no
+    sirve para probar lo que el servidor hace con lo raro.
+    """
     metodo, ruta, version, cabeceras, cuerpo = parse_raw(texto)
 
     objetivo = (host, port) if host else destino_de(cabeceras)
@@ -73,29 +92,55 @@ def send_raw(
             "Agrega 'Host: servidor:puerto' o pasa el destino aparte."
         )
     h, p = objetivo[0], (port or objetivo[1] or 80)
+    usar_tls = (p == 443) if tls is None else tls
 
-    enviar = [(k, v) for k, v in cabeceras if k.lower() not in HOP_BY_HOP]
+    enviar = list(cabeceras)
     if recalcular_cl:
         enviar = [(k, v) for k, v in enviar if k.lower() != "content-length"]
         if cuerpo:
             enviar.append(("Content-Length", str(len(cuerpo))))
 
-    url = f"http://{h}:{p}{ruta}" if p != 80 else f"http://{h}{ruta}"
+    esquema = "https" if usar_tls else "http"
+    defecto = 443 if usar_tls else 80
+    url = f"{esquema}://{h}{'' if p == defecto else f':{p}'}{ruta}"
     req = Request(method=metodo, url=url, http_version=version,
                   headers=enviar, body=cuerpo)
 
     inicio = time.time()
+    s = None
     try:
-        con = http.client.HTTPConnection(h, p, timeout=timeout)
-        con.request(metodo, ruta, body=cuerpo, headers=dict(enviar))
-        r = con.getresponse()
+        s = socket.create_connection((h, p), timeout=timeout)
+        if usar_tls:
+            # En pruebas el certificado casi nunca es valido y no es el
+            # objeto del test: se acepta cualquiera.
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            s = ctx.wrap_socket(s, server_hostname=h)
+
+        s.sendall(build_raw(metodo, ruta, version, enviar, cuerpo))
+
+        # El parser de la stdlib sabe de Content-Length, chunked y HEAD;
+        # no hay razon para reescribirlo.
+        r = http.client.HTTPResponse(s, method=metodo)
+        r.begin()
         datos = r.read()
-        cab = [(k, v) for k, v in r.getheaders() if k.lower() not in HOP_BY_HOP]
-        resp = Response(status=r.status, reason=r.reason, headers=cab, body=datos)
-        con.close()
+        resp = Response(
+            status=r.status, reason=r.reason,
+            http_version="HTTP/1.0" if r.version == 10 else "HTTP/1.1",
+            headers=[(k, v) for k, v in r.getheaders()
+                     if k.lower() != "transfer-encoding"],   # el cuerpo ya viene des-chunkeado
+            body=datos,
+        )
         return Flow(request=req, response=resp, started=inicio,
                     duration_ms=int((time.time() - inicio) * 1000), source="repeater")
     except Exception as e:
         return Flow(request=req, response=None, started=inicio,
                     duration_ms=int((time.time() - inicio) * 1000),
                     source="repeater", error=f"{type(e).__name__}: {e}")
+    finally:
+        if s is not None:
+            try:
+                s.close()
+            except OSError:
+                pass

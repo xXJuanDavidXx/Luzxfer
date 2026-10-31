@@ -6,7 +6,9 @@ y sin dependencias es lo que permite cambiar de motor sin tocar nada mas.
 """
 from __future__ import annotations
 
+import gzip
 import time
+import zlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -78,8 +80,37 @@ class Response:
     def content_type(self) -> str:
         return (self.header("content-type") or "").split(";")[0].strip()
 
+    @property
+    def encoding(self) -> str:
+        return (self.header("content-encoding") or "").strip().lower()
+
+    def decoded_body(self) -> bytes:
+        """El cuerpo descomprimido, para leerlo y analizarlo.
+
+        `body` se guarda tal como vino del servidor (es lo que se reenvia y
+        es la evidencia). Pero buscar reflejos en bytes gzip no encuentra
+        nada, y los objetivos reales comprimen casi todo el HTML.
+        Brotli no esta en la stdlib: esos cuerpos quedan sin decodificar.
+        """
+        enc = self.encoding
+        if not enc or enc == "identity":
+            return self.body
+        try:
+            if enc in ("gzip", "x-gzip"):
+                return gzip.decompress(self.body)
+            if enc == "deflate":
+                try:
+                    return zlib.decompress(self.body)
+                except zlib.error:            # deflate crudo, sin cabecera zlib
+                    return zlib.decompress(self.body, -zlib.MAX_WBITS)
+        except (OSError, zlib.error, EOFError):
+            pass                              # cuerpo corrupto: se muestra tal cual
+        return self.body
+
     def text(self, limite: int | None = None) -> str:
-        datos = self.body if limite is None else self.body[:limite]
+        datos = self.decoded_body()
+        if limite is not None:
+            datos = datos[:limite]
         return datos.decode("utf-8", "replace")
 
     def raw_headers(self) -> str:

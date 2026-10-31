@@ -52,10 +52,27 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(AVISO_CONNECT)
 
+    def _leer_cuerpo(self) -> bytes:
+        """Content-Length o chunked. Sin soportar chunked, el cuerpo se leia
+        vacio y los trozos quedaban en el socket rompiendo la siguiente
+        peticion; clientes de API y apps moviles lo usan bastante."""
+        if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+            datos = bytearray()
+            while True:
+                linea = self.rfile.readline(65537)
+                tam = int(linea.split(b";", 1)[0].strip() or b"0", 16)
+                if tam == 0:
+                    while self.rfile.readline(65537) not in (b"\r\n", b"\n", b""):
+                        pass                      # trailers, se descartan
+                    return bytes(datos)
+                datos += self.rfile.read(tam)
+                self.rfile.readline(65537)        # CRLF tras cada trozo
+        largo = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(largo) if largo else b""
+
     def _manejar(self):
         inicio = time.time()
-        largo = int(self.headers.get("Content-Length") or 0)
-        cuerpo = self.rfile.read(largo) if largo else b""
+        cuerpo = self._leer_cuerpo()
 
         destino, ruta, url = self.engine._resolver(self.path, self.headers.get("Host", ""))
         if destino is None:
@@ -63,19 +80,28 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         salida: list[tuple[str, str]] = []
-        for k, v in self.headers.items():
-            if k.lower() in HOP_BY_HOP:
+        for k, v in self.headers.items():        # items() conserva duplicados
+            if k.lower() in HOP_BY_HOP or k.lower() == "content-length":
                 continue
             if k.lower() == "host":
                 v = f"{destino[0]}:{destino[1]}" if destino[1] != 80 else destino[0]
             salida.append((k, v))
+        # el cuerpo se reenvia entero (ya des-chunkeado), con su largo real
+        if cuerpo or self.command in ("POST", "PUT", "PATCH"):
+            salida.append(("Content-Length", str(len(cuerpo))))
 
         req = Request(method=self.command, url=url, headers=salida, body=cuerpo,
                       http_version=self.request_version)
 
         try:
             con = http.client.HTTPConnection(destino[0], destino[1], timeout=30)
-            con.request(self.command, ruta, body=cuerpo, headers=dict(salida))
+            # putheader en vez de request(headers=dict): un dict colapsa las
+            # cabeceras repetidas, y skip_* evita que http.client invente
+            # cabeceras que el cliente no mando.
+            con.putrequest(self.command, ruta, skip_host=True, skip_accept_encoding=True)
+            for k, v in salida:
+                con.putheader(k, v)
+            con.endheaders(cuerpo or None)
             r = con.getresponse()
             datos = r.read()
             cab = [(k, v) for k, v in r.getheaders() if k.lower() not in HOP_BY_HOP]
@@ -95,13 +121,18 @@ class _Handler(BaseHTTPRequestHandler):
         self.engine._emitir(flujo)
 
         self.send_response(resp.status, resp.reason)
+        es_head = self.command == "HEAD"
         for k, v in resp.headers:
-            if k.lower() == "content-length":
+            # en HEAD el Content-Length del servidor describe un cuerpo que
+            # no viaja: se conserva tal cual
+            if k.lower() == "content-length" and not es_head:
                 continue
             self.send_header(k, v)
-        self.send_header("Content-Length", str(len(resp.body)))
+        if not es_head:
+            self.send_header("Content-Length", str(len(resp.body)))
         self.end_headers()
-        self.wfile.write(resp.body)
+        if not es_head:
+            self.wfile.write(resp.body)
 
     def _error_simple(self, code: int, texto: str):
         datos = texto.encode()

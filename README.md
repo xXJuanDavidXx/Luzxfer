@@ -74,6 +74,14 @@ Inside the repeater: `ctrl+s` sends, `esc` closes. `Content-Length` is
 recalculated on send, because editing a raw request by hand and forgetting it
 is the most common mistake there is.
 
+**What you write is what travels.** The repeater writes to a raw socket instead
+of going through an HTTP library, so duplicate headers stay duplicated, no
+header is added behind your back, and non-standard methods go out as typed.
+A repeater that tidies up your request is useless for testing what the server
+does with the untidy one. It also speaks TLS on its own, so it can hit HTTPS
+targets even though the built-in proxy engine does not intercept them.
+Sending happens off the UI thread: a slow target never freezes the interface.
+
 ## Candidates, not findings
 
 While you browse, luzxfer flags things worth a look: reflected input, cookies

@@ -107,7 +107,7 @@ class LuzxferApp(App):
     # ------------------------------------------------------------------
     def on_mount(self) -> None:
         tabla = self.query_one("#flujos", DataTable)
-        tabla.add_column("#", width=5)
+        self._col_id = tabla.add_column("#", width=6)
         tabla.add_column("met", width=7)
         tabla.add_column("cod", width=5)
         tabla.add_column("host", width=22)
@@ -157,46 +157,77 @@ class LuzxferApp(App):
         self.call_from_thread(self._ingresar, flujo)
 
     def _ingresar(self, flujo: Flow) -> None:
+        """Entra un flujo nuevo. Incremental: no reconstruye la tabla.
+
+        El historial va en orden ascendente, como el de Burp. Asi un flujo
+        nuevo se agrega al final sin mover los indices de los anteriores, y
+        lo que el analista tiene seleccionado no salta mientras llega trafico.
+        """
         self.store.add_flow(flujo)
-        for h in detector.analizar(flujo):
-            self.store.add_finding(h)
-        self.refrescar_tabla()
+        nuevos = [h for h in detector.analizar(flujo) if self.store.add_finding(h)]
+
+        tabla = self.query_one("#flujos", DataTable)
+        if self._coincide(flujo):
+            al_final = tabla.row_count == 0 or tabla.cursor_row >= tabla.row_count - 1
+            self._agregar_fila(tabla, flujo)
+            if al_final:                        # seguir el trafico solo si ya lo seguias
+                tabla.move_cursor(row=tabla.row_count - 1)
+
+        hall = self.query_one("#hallazgos", DataTable)
+        for h in nuevos:
+            self._agregar_hallazgo(hall, h)
         self.actualizar_estado()
+
+    def _coincide(self, f: Flow) -> bool:
+        return not self._filtro or self._filtro.lower() in f.request.url.lower()
+
+    @staticmethod
+    def _agregar_fila(tabla: DataTable, f: Flow) -> None:
+        tabla.add_row(
+            Text(f"{'●' if f.marked else ''}{f.id}",
+                 style="#f0a93b" if f.marked else "#7b8496"),
+            pinta_metodo(f.request.method),
+            pinta_estado(f.status, f.error),
+            Text(f.request.host or "—", style="#a8b0c0"),
+            Text(f.request.path, style="#d9dde5"),
+            Text(tamano_legible(f.size), style="#7b8496"),
+            Text(str(f.duration_ms), style="#7b8496"),
+            key=str(f.id),
+        )
+
+    COLOR_HALLAZGO = {"REFLEJO": "#e05c5c", "COOKIE": "#f0a93b",
+                      "CABECERA": "#5fa8d3", "FUGA": "#7b8496", "ERROR": "#c99bf0"}
+
+    def _agregar_hallazgo(self, hall: DataTable, h) -> None:
+        hall.add_row(
+            Text(h.kind, style=f"bold {self.COLOR_HALLAZGO.get(h.kind, '#d9dde5')}"),
+            Text(h.detail, style="#d9dde5"),
+            Text(", ".join(h.wstg), style="#6fcf8f"),
+            Text(h.url, style="#7b8496"),
+        )
 
     # ------------------------------------------------------------------
     def refrescar_tabla(self) -> None:
+        """Reconstruccion completa: solo al filtrar, limpiar o arrancar.
+        Restaura la seleccion por id de flujo, no por indice."""
         tabla = self.query_one("#flujos", DataTable)
-        fila_sel = tabla.cursor_row
+        elegido = self._flujo_actual.id if self._flujo_actual else None
         tabla.clear()
-        for f in self.store.list_flows(texto=self._filtro):
-            marca = "●" if f.marked else ""
-            tabla.add_row(
-                Text(f"{marca}{f.id}", style="#f0a93b" if f.marked else "#7b8496"),
-                pinta_metodo(f.request.method),
-                pinta_estado(f.status, f.error),
-                Text(f.request.host or "—", style="#a8b0c0"),
-                Text(f.request.path, style="#d9dde5"),
-                Text(tamano_legible(f.size), style="#7b8496"),
-                Text(str(f.duration_ms), style="#7b8496"),
-                key=str(f.id),
-            )
-        if tabla.row_count and fila_sel is not None:
-            tabla.move_cursor(row=min(fila_sel, tabla.row_count - 1))
+        for f in self.store.list_flows(texto=self._filtro, ascendente=True):
+            self._agregar_fila(tabla, f)
+        if tabla.row_count:
+            fila = tabla.row_count - 1
+            if elegido is not None:
+                try:
+                    fila = tabla.get_row_index(str(elegido))
+                except Exception:
+                    pass                        # el elegido quedo fuera del filtro
+            tabla.move_cursor(row=fila)
 
-        self._refrescar_hallazgos()
-
-    def _refrescar_hallazgos(self) -> None:
         hall = self.query_one("#hallazgos", DataTable)
         hall.clear()
-        colores = {"REFLEJO": "#e05c5c", "COOKIE": "#f0a93b",
-                   "CABECERA": "#5fa8d3", "FUGA": "#7b8496", "ERROR": "#c99bf0"}
-        for h in self.store.list_findings():
-            hall.add_row(
-                Text(h.kind, style=f"bold {colores.get(h.kind, '#d9dde5')}"),
-                Text(h.detail, style="#d9dde5"),
-                Text(", ".join(h.wstg), style="#6fcf8f"),
-                Text(h.url, style="#7b8496"),
-            )
+        for h in reversed(self.store.list_findings()):
+            self._agregar_hallazgo(hall, h)
 
     def actualizar_estado(self) -> None:
         motor = "detenido"
@@ -273,10 +304,16 @@ class LuzxferApp(App):
     def action_marcar(self) -> None:
         if self._flujo_actual is None or self._flujo_actual.id is None:
             return
-        nuevo = not self._flujo_actual.marked
-        self.store.set_mark(self._flujo_actual.id, nuevo)
-        self._flujo_actual.marked = nuevo
-        self.refrescar_tabla()
+        f = self._flujo_actual
+        f.marked = not f.marked
+        self.store.set_mark(f.id, f.marked)
+        try:
+            self.query_one("#flujos", DataTable).update_cell(
+                str(f.id), self._col_id,
+                Text(f"{'●' if f.marked else ''}{f.id}",
+                     style="#f0a93b" if f.marked else "#7b8496"))
+        except Exception:
+            pass                                # la fila no esta visible con el filtro
 
     def action_limpiar(self) -> None:
         self.store.clear_flows()

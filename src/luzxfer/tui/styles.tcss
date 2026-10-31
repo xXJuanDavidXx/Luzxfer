@@ -154,13 +154,24 @@ RepeaterScreen {
     border: tall #f0a93b;
 }
 
-#rep-salida {
+/* El borde y el alto van en el contenedor con scroll; la salida crece con
+   su contenido. Con height: 1fr en la salida, una respuesta larga quedaba
+   cortada al alto visible y no habia nada que desplazar. */
+#rep-scroll {
     height: 1fr;
     background: #0b0c10;
-    color: #c7cdd9;
     border: tall #262a35;
+    scrollbar-background: #14161c;
+    scrollbar-color: #39404f;
+    scrollbar-color-hover: #f0a93b;
+    scrollbar-size: 1 1;
+}
+
+#rep-salida {
+    height: auto;
+    background: #0b0c10;
+    color: #c7cdd9;
     padding: 0 1;
-    overflow-y: auto;
 }
 
 #rep-barra {

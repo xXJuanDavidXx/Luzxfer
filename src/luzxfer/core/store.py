@@ -132,6 +132,7 @@ class Store:
         estado: str = "",
         solo_marcados: bool = False,
         limite: int = 1000,
+        ascendente: bool = False,
     ) -> list[Flow]:
         """Lista para la tabla. Los filtros son los que se usan de verdad:
         texto en la URL, metodo, familia de codigo de estado."""
@@ -157,7 +158,9 @@ class Store:
         args.append(limite)
         with self._lock:
             filas = self._con.execute(" ".join(sql), args).fetchall()
-        return [self._fila_a_flow(f) for f in filas]
+        flujos = [self._fila_a_flow(f) for f in filas]
+        # siempre se toman los N mas recientes; ascendente solo cambia el orden
+        return flujos[::-1] if ascendente else flujos
 
     def count_flows(self) -> int:
         with self._lock:
