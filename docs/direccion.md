@@ -98,16 +98,28 @@ en cada píxel de analítica y cada CDN — inusable.
 
 ```
 1. Sesiones y deuda      → docs/superpowers/plans/2026-10-31-sesiones-y-deuda.md
-2. Scope y sitemap         prerrequisito de 3 y de 5
-3. Interceptar y editar    la brecha mas grande con Burp
-4. Intruder                ya en el roadmap; Flow.source reserva "intruder"
-5. DAST con correa         necesita 2
+2. Intruder                send_raw ya hace el trabajo sucio
+3. Scope y sitemap         prerrequisito de 5
+4. Interceptar y editar    la brecha mas grande con Burp
+5. DAST con correa         necesita 3
 6. Matriz WSTG y reporte   la razon de ser declarada
 7. Adaptador mitmproxy     la interfaz Engine ya esta lista
 8. API de plugins
 
    IA: aplazada sin fecha, por la decision 3.
 ```
+
+**El Intruder subió al puesto 2 el 2026-10-31**, por encima de scope y de
+interceptación, y conviene saber por qué para no revertirlo sin pensar:
+
+- **Ya está casi construido.** `send_raw()` manda por socket crudo, habla TLS,
+  conserva cabeceras duplicadas y acepta métodos no estándar; el repeater ya
+  envía fuera del hilo de la interfaz. Un Intruder es eso en bucle, con un
+  punto de inyección y una tabla de resultados.
+- **No necesita scope**, al revés que el DAST. La regla 5 dice «nada que la
+  herramienta origine *por su cuenta*»: el Intruder no dispara por su cuenta,
+  el analista elige la petición y marca dónde. Es la misma autorización que
+  ya tiene el repeater.
 
 Los pasos 1 y 2 no son deuda aburrida que se tolera: son lo que hace posible
 todo lo de arriba sin convertir la herramienta en un peligro.

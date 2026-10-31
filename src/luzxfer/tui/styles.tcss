@@ -266,3 +266,18 @@ Button.-primary:hover {
     height: 1;
     margin-top: 1;
 }
+
+/* vista combinada: dos paneles al cincuenta por ciento */
+#ambos {
+    height: 1fr;
+}
+
+.mitad {
+    width: 1fr;
+}
+
+#btn-vista {
+    min-width: 20;
+    height: 3;
+    margin: 0 1;
+}

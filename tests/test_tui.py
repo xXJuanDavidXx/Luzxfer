@@ -383,3 +383,96 @@ async def test_lo_confirmado_se_ve_en_la_tabla_de_candidatos():
         await pilot.press("v")
         await pilot.pause()
         assert "✓" in str(hall.get_row_at(0)[0])
+
+
+# ------------------------------------------- vista combinada (t / boton)
+async def test_la_tecla_t_alterna_a_vista_combinada():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        assert app.vista_combinada is False
+
+        await pilot.press("t")
+        await pilot.pause()
+        assert app.vista_combinada is True
+        assert app.query_one("#detalle").active == "tab-ambos"
+
+        await pilot.press("t")
+        await pilot.pause()
+        assert app.vista_combinada is False
+        assert app.query_one("#detalle").active == "tab-req"
+
+
+async def test_la_vista_combinada_muestra_peticion_y_respuesta_a_la_vez():
+    app = app_prueba()
+    async with app.run_test(size=(140, 40)) as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.press("t")
+        await pilot.pause()
+        izq = app.query_one("#ambos-req", Static).render().plain
+        der = app.query_one("#ambos-resp", Static).render().plain
+        assert "GET /ruta?q=PRUEBA" in izq
+        assert "buscaste: PRUEBA" in der
+
+
+async def test_los_candidatos_siguen_alcanzables_en_vista_combinada():
+    """Esconder el TabbedContent entero habria dejado la pestana de
+    candidatos inaccesible justo en el modo nuevo."""
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        app.query_one("#detalle").active = "tab-hall"
+        await pilot.pause()
+        assert app.query_one("#hallazgos", DataTable).row_count > 0
+
+
+async def test_el_boton_alterna_igual_que_la_tecla():
+    from textual.widgets import Button
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert "separadas" in str(app.query_one("#btn-vista", Button).label)
+        app.query_one("#btn-vista", Button).press()
+        await pilot.pause()
+        assert app.vista_combinada is True
+        assert "juntas" in str(app.query_one("#btn-vista", Button).label)
+
+
+async def test_la_vista_combinada_tambien_se_repinta_al_cambiar_de_flujo():
+    app = app_prueba()
+    async with app.run_test(size=(140, 40)) as pilot:
+        app._ingresar(_flujo(url="http://ej.com/uno?q=UNO", cuerpo=b"<html>UNO</html>"))
+        app._ingresar(_flujo(url="http://ej.com/dos?q=DOS", cuerpo=b"<html>DOS</html>"))
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        assert "/uno" in app.query_one("#ambos-req", Static).render().plain
+        app.query_one("#flujos", DataTable).move_cursor(row=1)
+        await pilot.pause()
+        assert "/dos" in app.query_one("#ambos-req", Static).render().plain
+
+
+async def test_la_vista_elegida_sobrevive_al_reinicio(tmp_path):
+    ruta = str(tmp_path / "s.db")
+    app = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert app.vista_combinada is True
+
+    otra = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with otra.run_test() as pilot:
+        await pilot.pause()
+        assert otra.vista_combinada is True
+        assert otra.query_one("#detalle").active == "tab-ambos"

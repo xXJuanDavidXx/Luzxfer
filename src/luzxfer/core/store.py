@@ -289,6 +289,24 @@ class Store:
             return int(self._con.execute("SELECT COUNT(*) c FROM findings").fetchone()["c"])
 
     # ------------------------------------------------------------------
+    def get_meta(self, clave: str, defecto: str = "") -> str:
+        """Un ajuste guardado con la sesion. Inexistente: `defecto`."""
+        with self._lock:
+            fila = self._con.execute(
+                "SELECT valor FROM meta WHERE clave=?", (clave,)).fetchone()
+        return fila["valor"] if fila else defecto
+
+    def set_meta(self, clave: str, valor: str) -> None:
+        """Guarda un ajuste. El ON CONFLICT es lo que evita duplicar."""
+        with self._lock:
+            self._con.execute(
+                "INSERT INTO meta (clave, valor) VALUES (?,?)"
+                " ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor",
+                (clave, valor),
+            )
+            self._con.commit()
+
+    # ------------------------------------------------------------------
     @staticmethod
     def _fila_a_flow(f: sqlite3.Row) -> Flow:
         req = Request(

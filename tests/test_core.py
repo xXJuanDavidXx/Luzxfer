@@ -342,3 +342,26 @@ def test_confirmar_sobrevive_al_reinicio(tmp_path):
     otra = Store(ruta)
     assert [h.confirmed for h in otra.list_findings() if h.id == hid] == [True]
     otra.close()
+
+
+def test_store_guarda_y_lee_meta(tmp_path):
+    """La tabla meta llevaba en el esquema desde la primera version sin
+    que nada la usara. La vista combinada es su primer inquilino."""
+    st = Store(tmp_path / "s.db")
+    assert st.get_meta("vista", "separadas") == "separadas"
+    assert st.get_meta("inexistente") == ""
+    st.set_meta("vista", "juntas")
+    assert st.get_meta("vista") == "juntas"
+    st.set_meta("vista", "separadas")          # sobrescribe, no duplica
+    assert st.get_meta("vista") == "separadas"
+    st.close()
+
+
+def test_meta_sobrevive_al_reinicio(tmp_path):
+    ruta = tmp_path / "s.db"
+    st = Store(ruta)
+    st.set_meta("vista", "juntas")
+    st.close()
+    otra = Store(ruta)
+    assert otra.get_meta("vista") == "juntas"
+    otra.close()

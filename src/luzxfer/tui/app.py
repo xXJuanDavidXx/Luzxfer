@@ -8,6 +8,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import (
+    Button,
     DataTable,
     Footer,
     Header,
@@ -70,6 +71,7 @@ class LuzxferApp(App):
         Binding("m", "marcar", "marcar"),
         Binding("n", "nota", "nota"),
         Binding("v", "confirmar", "confirmar"),
+        Binding("t", "vista", "vista"),
         Binding("c", "limpiar", "limpiar"),
         Binding("g", "arriba", "inicio", show=False),
         Binding("G", "abajo", "final", show=False),
@@ -103,12 +105,14 @@ class LuzxferApp(App):
         self.engine: Builtin | None = None
         self._flujo_actual: Flow | None = None
         self._filtro = ""
+        self.vista_combinada = False
 
     # ------------------------------------------------------------------
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Horizontal(id="barra"):
             yield Input(placeholder="filtrar por url…  (f)", id="filtro")
+            yield Button("vista: separadas", id="btn-vista")
             yield Static("", id="estado")
         yield DataTable(id="flujos", cursor_type="row", zebra_stripes=False)
         with TabbedContent(id="detalle"):
@@ -118,6 +122,15 @@ class LuzxferApp(App):
             with TabPane("respuesta", id="tab-resp"):
                 with VerticalScroll(classes="panel"):
                     yield Static("", id="panel-resp")
+            # las cuatro pestanas existen siempre y el modo solo cambia
+            # cuales se ven: nada se reconstruye al alternar, y candidatos
+            # sigue alcanzable en los dos modos
+            with TabPane("peticion + respuesta", id="tab-ambos"):
+                with Horizontal(id="ambos"):
+                    with VerticalScroll(classes="panel mitad"):
+                        yield Static("", id="ambos-req")
+                    with VerticalScroll(classes="panel mitad"):
+                        yield Static("", id="ambos-resp")
             with TabPane("candidatos", id="tab-hall"):
                 yield DataTable(id="hallazgos", cursor_type="row")
         yield Footer()
@@ -143,16 +156,50 @@ class LuzxferApp(App):
 
         self._mostrar_vacio()
         self.refrescar_tabla()
+        # la vista se lee aqui y no en __init__: ahi los widgets no existen
+        self._aplicar_vista(self.store.get_meta("vista") == "juntas")
 
         if self.arrancar_motor:
             self.arrancar()
         self.actualizar_estado()
 
     def _mostrar_vacio(self) -> None:
-        self.query_one("#panel-req", Static).update(
-            Text("Selecciona un flujo de la tabla.", style="italic #5c6578"))
-        self.query_one("#panel-resp", Static).update(
-            Text("Selecciona un flujo de la tabla.", style="italic #5c6578"))
+        vacio = Text("Selecciona un flujo de la tabla.", style="italic #5c6578")
+        for wid in ("#panel-req", "#panel-resp", "#ambos-req", "#ambos-resp"):
+            self.query_one(wid, Static).update(vacio)
+
+    # ------------------------------------------------------------------
+    def _aplicar_vista(self, combinada: bool) -> None:
+        """Alterna entre pestanas separadas y las dos a la vez.
+
+        Se muestra la pestana destino y se activa ANTES de esconder las
+        otras: esconder la activa deja a Textual eligiendo cual queda, y
+        no siempre la que uno quiere.
+        """
+        self.vista_combinada = combinada
+        det = self.query_one("#detalle", TabbedContent)
+        if combinada:
+            det.show_tab("tab-ambos")
+            det.active = "tab-ambos"
+            det.hide_tab("tab-req")
+            det.hide_tab("tab-resp")
+        else:
+            det.show_tab("tab-req")
+            det.show_tab("tab-resp")
+            det.active = "tab-req"
+            det.hide_tab("tab-ambos")
+        self.query_one("#btn-vista", Button).label = (
+            "vista: juntas" if combinada else "vista: separadas")
+
+    def action_vista(self) -> None:
+        self._aplicar_vista(not self.vista_combinada)
+        self.store.set_meta("vista", "juntas" if self.vista_combinada else "separadas")
+        if self._flujo_actual is not None:
+            self._pintar_detalle(self._flujo_actual)
+
+    def on_button_pressed(self, ev: Button.Pressed) -> None:
+        if ev.button.id == "btn-vista":
+            self.action_vista()
 
     # ------------------------------------------------------------------
     def arrancar(self) -> None:
@@ -299,15 +346,13 @@ class LuzxferApp(App):
         if f.note:
             partes_req.append((f"✎ {f.note}\n\n", "#f0a93b"))
         partes_req.append((f.request.raw(), "#c7cdd9"))
-        self.query_one("#panel-req", Static).update(Text.assemble(*partes_req))
+        self._poner("req", Text.assemble(*partes_req))
 
         if f.error:
-            self.query_one("#panel-resp", Static).update(
-                Text(f"error de red\n\n{f.error}", style="#e05c5c"))
+            self._poner("resp", Text(f"error de red\n\n{f.error}", style="#e05c5c"))
             return
         if f.response is None:
-            self.query_one("#panel-resp", Static).update(
-                Text("sin respuesta", style="italic #5c6578"))
+            self._poner("resp", Text("sin respuesta", style="italic #5c6578"))
             return
 
         r = f.response
@@ -330,7 +375,17 @@ class LuzxferApp(App):
                 f"  el Accept-Encoding. Solucion:  pip install 'luzxfer[br]'\n\n",
                 "#f0a93b"))
         partes.append((cuerpo, "#c7cdd9"))
-        self.query_one("#panel-resp", Static).update(Text.assemble(*partes))
+        self._poner("resp", Text.assemble(*partes))
+
+    def _poner(self, lado: str, texto: Text) -> None:
+        """Escribe en el panel de los DOS modos a la vez.
+
+        Pintar siempre los dos cuesta un update de mas y a cambio alternar
+        es instantaneo y nunca muestra lo del flujo anterior. El cuerpo ya
+        viene recortado a 200.000 caracteres, asi que no es medible.
+        """
+        self.query_one(f"#panel-{lado}", Static).update(texto)
+        self.query_one(f"#ambos-{lado}", Static).update(texto)
 
     def on_input_changed(self, ev: Input.Changed) -> None:
         if ev.input.id == "filtro":
