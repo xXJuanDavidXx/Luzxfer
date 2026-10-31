@@ -22,6 +22,7 @@ from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import detector
 from .screens.repeater import RepeaterScreen
+from .screens.sesiones import SesionesScreen
 
 COLOR_ESTADO = {2: "#6fcf8f", 3: "#5fa8d3", 4: "#f0a93b", 5: "#e05c5c"}
 COLOR_METODO = {
@@ -57,6 +58,7 @@ class LuzxferApp(App):
     BINDINGS = [
         Binding("q", "quit", "salir"),
         Binding("r", "repeater", "repeater"),
+        Binding("s", "sesiones", "sesiones"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
         Binding("c", "limpiar", "limpiar"),
@@ -305,6 +307,22 @@ class LuzxferApp(App):
             self.notify("selecciona un flujo primero", severity="warning")
             return
         self.push_screen(RepeaterScreen(self._flujo_actual))
+
+    def action_sesiones(self) -> None:
+        self.push_screen(SesionesScreen(self.sesion), self._tras_elegir_sesion)
+
+    def _tras_elegir_sesion(self, nombre: str | None) -> None:
+        """Cambiar de sesion en caliente no esta implementado a proposito.
+
+        Reemplazar el Store vivo con el motor corriendo y flujos entrando
+        es un problema distinto del de no perder el historial, y mezclarlo
+        aqui habria arrastrado los dos. Por ahora se dice que comando abre
+        la que se eligio.
+        """
+        if not nombre or nombre == self.sesion:
+            return
+        self.notify(f"luzxfer -s {nombre}", title="para abrir esa sesion",
+                    timeout=10)
 
     def action_marcar(self) -> None:
         if self._flujo_actual is None or self._flujo_actual.id is None:

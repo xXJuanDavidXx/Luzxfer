@@ -224,3 +224,26 @@ Button.-primary:hover {
     padding: 2 2;
     text-style: italic;
 }
+
+/* selector de sesiones: misma caja modal que el repeater */
+#ses-caja {
+    width: 80%;
+    height: 70%;
+    background: #0e1016;
+    border: round #f0a93b;
+    padding: 1 2;
+}
+
+#ses-titulo {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#ses-tabla {
+    height: 1fr;
+}
+
+#ses-ayuda {
+    height: 1;
+    margin-top: 1;
+}

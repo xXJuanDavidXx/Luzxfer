@@ -352,3 +352,148 @@ def test_cli_sesiones_marca_la_ilegible(monkeypatch, tmp_path, capsys):
     sesiones.dir_sesiones().joinpath("rota.db").write_bytes(b"no soy sqlite")
     assert main(["--sesiones"]) == 0
     assert "ilegible" in capsys.readouterr().out.lower()
+
+
+# ------------------------------------------------------ selector en la TUI
+def _app(nombre: str = "cliente-x"):
+    from luzxfer.tui.app import LuzxferApp
+    return LuzxferApp(arrancar_motor=False, sesion=nombre)
+
+
+def _tabla(app):
+    from textual.widgets import DataTable
+    return app.screen.query_one("#ses-tabla", DataTable)
+
+
+def _fila_de(tabla, nombre: str) -> int:
+    """El indice de la fila de esa sesion, sin asumir el orden."""
+    for f in range(tabla.row_count):
+        if nombre in str(tabla.get_row_at(f)[0]):
+            return f
+    raise AssertionError(f"no esta la fila de {nombre!r}")
+
+
+async def test_la_tecla_s_abre_el_selector(monkeypatch, tmp_path):
+    from luzxfer.tui.screens.sesiones import SesionesScreen
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("cliente-x", n_flujos=2)
+    app = _app()
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        assert isinstance(app.screen, SesionesScreen)
+
+
+async def test_el_selector_lista_las_sesiones_con_sus_contadores(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("cliente-x", n_flujos=3)
+    _sesion("lab-dvwa", n_flujos=1)
+    app = _app()
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        tabla = _tabla(app)
+        assert tabla.row_count == 2
+        texto = " ".join(str(c) for f in range(tabla.row_count)
+                         for c in tabla.get_row_at(f))
+        assert "cliente-x" in texto and "lab-dvwa" in texto and "3" in texto
+
+
+async def test_esc_cierra_el_selector_sin_elegir(monkeypatch, tmp_path):
+    from luzxfer.tui.screens.sesiones import SesionesScreen
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("cliente-x", n_flujos=1)
+    app = _app()
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, SesionesScreen)
+
+
+async def test_el_selector_no_borra_la_sesion_abierta(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("abierta", n_flujos=1)
+    _sesion("otra", n_flujos=1)
+    app = _app("abierta")
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        tabla = _tabla(app)
+        tabla.move_cursor(row=_fila_de(tabla, "abierta"))
+        await pilot.press("delete")
+        await pilot.pause()
+        assert sesiones.ruta_de("abierta").exists()
+
+
+async def test_el_selector_si_borra_otra_sesion(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("abierta", n_flujos=1)
+    _sesion("vieja", n_flujos=1)
+    app = _app("abierta")
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        tabla = _tabla(app)
+        tabla.move_cursor(row=_fila_de(tabla, "vieja"))
+        await pilot.press("delete")
+        await pilot.pause()
+        assert not sesiones.ruta_de("vieja").exists()
+        assert _tabla(app).row_count == 1          # la tabla se refresco
+
+
+async def test_una_sesion_ilegible_se_lista_y_no_se_puede_elegir(monkeypatch, tmp_path):
+    from luzxfer.tui.screens.sesiones import SesionesScreen
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("buena", n_flujos=1)
+    sesiones.dir_sesiones().joinpath("rota.db").write_bytes(b"no soy sqlite")
+    app = _app("buena")
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        tabla = _tabla(app)
+        assert tabla.row_count == 2
+        tabla.move_cursor(row=_fila_de(tabla, "rota"))
+        await pilot.press("enter")
+        await pilot.pause()
+        # elegir una sesion ilegible no hace nada: la pantalla sigue abierta
+        assert isinstance(app.screen, SesionesScreen)
+
+
+async def test_elegir_una_sesion_sana_cierra_el_selector(monkeypatch, tmp_path):
+    from luzxfer.tui.screens.sesiones import SesionesScreen
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("abierta", n_flujos=1)
+    _sesion("otra", n_flujos=1)
+    app = _app("abierta")
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        tabla = _tabla(app)
+        tabla.move_cursor(row=_fila_de(tabla, "otra"))
+        await pilot.press("enter")
+        await pilot.pause()
+        assert not isinstance(app.screen, SesionesScreen)
+
+
+async def test_el_selector_aterriza_en_la_sesion_abierta(monkeypatch, tmp_path):
+    """El orden es por fecha, asi que la primera fila puede ser cualquiera
+    —incluso una ilegible—. Quien abre el selector espera verse a si mismo."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _sesion("abierta", n_flujos=1)
+    time.sleep(0.02)
+    _sesion("mas-nueva", n_flujos=1)
+    sesiones.dir_sesiones().joinpath("rota.db").write_bytes(b"basura")
+
+    app = _app("abierta")
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        tabla = _tabla(app)
+        bajo_cursor = tabla.coordinate_to_cell_key((tabla.cursor_row, 0)).row_key.value
+        assert bajo_cursor == "abierta"
