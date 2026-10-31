@@ -65,22 +65,29 @@ El analista sigue decidiendo. La herramienta solo deja de hacerle perder
 tiempo. La distinción *candidato* contra *hallazgo confirmado* que el README ya
 promete se vuelve más importante, no menos.
 
-### 3. IA: las dos opciones detrás de una sola interfaz
+### 3. IA: aplazada, y no por falta de ganas
 
-Mismo patrón que `Engine`, que es la pieza que ya sostiene el diseño: se define
-una interfaz abstracta, y cambiar de proveedor es cambiar una clase.
+**Decisión del 2026-10-31: no se implementa por ahora.** El esfuerzo va entero
+a que la experiencia base iguale a Burp.
 
-- **Primero el adaptador remoto**, por `urllib.request` de la stdlib, que ya
-  habla HTTPS. **Cero dependencias nuevas, Termux intacto.** Clave por variable
-  de entorno, **apagado por defecto**.
-- **El adaptador local** queda como extra opcional, igual que `[mitm]`. Rompe
-  la regla de cero dependencias nativas, así que nunca en el camino por defecto.
+El motivo de aplazarla no es técnico — `urllib` de la stdlib habla HTTPS y el
+adaptador remoto no costaba una dependencia nueva. Es que **mandar tráfico a
+una API de terceros es sacar datos de un cliente fuera de su perímetro**, y en
+un pentest con contrato eso puede ser una violación del acuerdo. Una
+herramienta que lo hace fácil de activar lo hace fácil de activar por error.
 
-**Advertencia que va en el README y en la interfaz, no solo aquí:** mandar
-tráfico a una API de terceros es sacar datos de un cliente fuera de su
-perímetro. En un pentest con contrato eso puede ser una violación. Tiene que
-ser **opt-in explícito, visible mientras está encendido, y documentado**. La
-interfaz local existe precisamente para quien no pueda permitirse la remota.
+Si se retoma, estas son las condiciones, ya decididas, para no rediscutirlas:
+
+- Detrás de una interfaz abstracta, mismo patrón que `Engine`: cambiar de
+  proveedor es cambiar una clase.
+- Adaptador remoto por `urllib.request`, cero dependencias nuevas, clave por
+  variable de entorno, **apagado por defecto**.
+- Adaptador local como extra opcional, igual que `[mitm]`.
+- **Opt-in explícito, visible en la interfaz mientras esté encendido, y
+  documentado en el README.** Nunca silencioso.
+
+Y la regla 6 de abajo sigue rigiendo: ni la IA ni el DAST confirman un
+hallazgo. Eso es de un humano.
 
 ### 4. Orden: cimientos primero
 
@@ -95,10 +102,11 @@ en cada píxel de analítica y cada CDN — inusable.
 3. Interceptar y editar    la brecha mas grande con Burp
 4. Intruder                ya en el roadmap; Flow.source reserva "intruder"
 5. DAST con correa         necesita 2
-6. Interfaz de IA          remota primero, local como extra
-7. Matriz WSTG y reporte   la razon de ser declarada
-8. Adaptador mitmproxy     la interfaz Engine ya esta lista
-9. API de plugins
+6. Matriz WSTG y reporte   la razon de ser declarada
+7. Adaptador mitmproxy     la interfaz Engine ya esta lista
+8. API de plugins
+
+   IA: aplazada sin fecha, por la decision 3.
 ```
 
 Los pasos 1 y 2 no son deuda aburrida que se tolera: son lo que hace posible
