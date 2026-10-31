@@ -6,6 +6,8 @@ payloads, no inventarse posiciones, no mandar mas de lo que dijo.
 """
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from luzxfer.core.tools import intruder
@@ -222,3 +224,140 @@ def test_desde_rango_rechaza_lo_imposible():
 def test_desde_texto_una_por_linea():
     assert intruder.desde_texto("a\nb\n\nc\n") == ["a", "b", "c"]
     assert intruder.desde_texto("") == []
+
+
+# ---------------------------------------------------- el motor de ataque
+def _cfg(**kw):
+    kw.setdefault("modo", intruder.Modo.SNIPER)
+    kw.setdefault("por_segundo", 1000)          # sin freno salvo donde se mida
+    return intruder.Config(**kw)
+
+
+def test_un_ataque_sniper_completo_contra_un_servidor_real(eco):
+    h, p = eco
+    crudo = f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n"
+    a = intruder.Ataque(crudo, _cfg(conjuntos=[["uno", "dos", "tres"]]))
+    assert a.total == 3
+    salida = []
+    a.correr(salida.append)
+    assert len(salida) == 3
+    assert {r.payloads[0] for r in salida} == {"uno", "dos", "tres"}
+    assert all(r.status == 200 and r.error == "" for r in salida)
+    assert a.terminado and a.enviadas == 3
+
+
+def test_content_length_se_recalcula_por_payload(eco):
+    """Cada payload cambia el largo del cuerpo. Es el fallo numero uno del
+    repeater, aqui multiplicado por cada iteracion: con el Content-Length
+    viejo el servidor se queda esperando bytes que no llegan."""
+    h, p = eco
+    crudo = (f"POST /eco HTTP/1.1\r\nHost: {h}:{p}\r\n"
+             f"Content-Type: application/x-www-form-urlencoded\r\n"
+             f"Content-Length: 99\r\n\r\nq=§X§")
+    salida = []
+    intruder.Ataque(crudo, _cfg(conjuntos=[["a", "muchomaslargo"]])).correr(salida.append)
+    assert all(r.status == 200 for r in salida)
+    assert {r.payloads[0] for r in salida} == {"a", "muchomaslargo"}
+
+
+def test_los_resultados_llegan_numerados_y_sin_perderse(eco):
+    h, p = eco
+    crudo = f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n"
+    a = intruder.Ataque(crudo, _cfg(conjuntos=[[str(i) for i in range(20)]],
+                                    concurrencia=4))
+    salida = []
+    a.correr(salida.append)
+    assert sorted(r.n for r in salida) == list(range(20))
+
+
+def test_el_tope_por_segundo_se_respeta_entre_hilos(eco):
+    """El reloj es del ataque entero, no de cada hilo. Con un sleep por
+    hilo, 4 hilos a 10/s mandarian 40/s sin que nadie lo note, que es
+    justo el accidente que el tope existe para evitar."""
+    h, p = eco
+    crudo = f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n"
+    a = intruder.Ataque(crudo, intruder.Config(
+        modo=intruder.Modo.SNIPER, conjuntos=[[str(i) for i in range(10)]],
+        concurrencia=4, por_segundo=20.0))
+    t = time.time()
+    a.correr(lambda r: None)
+    assert time.time() - t > 0.4          # 10 a 20/s no bajan de ~0,45 s
+
+
+def test_abortar_corta_el_ataque(eco):
+    h, p = eco
+    crudo = f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n"
+    a = intruder.Ataque(crudo, intruder.Config(
+        modo=intruder.Modo.SNIPER, conjuntos=[[str(i) for i in range(500)]],
+        concurrencia=2, por_segundo=200.0))
+    salida = []
+
+    def al_llegar(r):
+        salida.append(r)
+        if len(salida) >= 5:
+            a.abortar()
+
+    a.correr(al_llegar)
+    assert a.terminado and a.abortado
+    assert 5 <= len(salida) < 500
+
+
+def test_abortar_antes_de_empezar_no_manda_nada(eco):
+    h, p = eco
+    a = intruder.Ataque(f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n",
+                        _cfg(conjuntos=[["a", "b", "c"]]))
+    a.abortar()
+    a.abortar()                               # idempotente
+    salida = []
+    a.correr(salida.append)
+    assert salida == [] and a.terminado
+
+
+def test_grep_match_marca_las_respuestas_que_contienen_el_texto(eco):
+    h, p = eco
+    crudo = f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n"
+    a = intruder.Ataque(crudo, _cfg(conjuntos=[["AGUJA", "pajar"]],
+                                    grep=["AGUJA"]))
+    salida = {}
+    a.correr(lambda r: salida.update({r.payloads[0]: r}))
+    assert salida["AGUJA"].grep == ["AGUJA"]
+    assert salida["pajar"].grep == []
+
+
+def test_un_error_de_red_no_tumba_el_ataque():
+    """Un objetivo que no responde da un resultado con error, no una
+    excepcion que se lleve por delante las peticiones que faltan."""
+    crudo = "GET /x?q=§X§ HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n"
+    a = intruder.Ataque(crudo, _cfg(conjuntos=[["a", "b"]], timeout=2.0))
+    salida = []
+    a.correr(salida.append)
+    assert len(salida) == 2
+    assert all(r.error and r.status is None for r in salida)
+
+
+def test_una_peticion_sin_marcadores_no_es_un_ataque():
+    with pytest.raises(intruder.ErrorAtaque):
+        intruder.Ataque("GET / HTTP/1.1\r\nHost: o.com\r\n\r\n",
+                        _cfg(conjuntos=[["a"]]))
+
+
+def test_el_ataque_valida_antes_de_abrir_un_socket():
+    """Descubrir que la configuracion esta mal en la peticion 300 es tarde
+    cuando esas 300 ya salieron hacia el sistema de un cliente."""
+    with pytest.raises(intruder.ErrorAtaque):
+        intruder.Ataque("GET /?q=§a§&r=§b§ HTTP/1.1\r\nHost: o\r\n\r\n",
+                        _cfg(modo=intruder.Modo.RACIMO, conjuntos=[["x"]]))
+
+
+def test_el_ataque_avisa_de_los_payloads_que_se_mutarian():
+    a = intruder.Ataque("GET /?q=§X§ HTTP/1.1\r\nHost: o\r\n\r\n",
+                        _cfg(conjuntos=[["ok", "日本"]]))
+    assert a.avisos == ["日本"]
+
+
+def test_el_total_se_sabe_sin_lanzar():
+    a = intruder.Ataque("GET /?q=§a§&r=§b§ HTTP/1.1\r\nHost: o\r\n\r\n",
+                        _cfg(modo=intruder.Modo.RACIMO,
+                             conjuntos=[[str(i) for i in range(100)]] * 2))
+    assert a.total == 10_000
+    assert a.enviadas == 0 and not a.terminado

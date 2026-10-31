@@ -16,9 +16,15 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Iterator
+import threading
+import time
+from collections.abc import Callable, Iterator
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
+from . import repeater
 
 MARCADOR = "§"
 
@@ -250,3 +256,152 @@ def desde_rango(desde: int, hasta: int, paso: int = 1, *, ancho: int = 0) -> lis
 def desde_texto(texto: str) -> list[str]:
     """Una por linea, que es lo que se teclea en la pantalla."""
     return [ln for ln in texto.splitlines() if ln.strip()]
+
+
+# ---------------------------------------------------- el motor de ataque
+@dataclass(slots=True)
+class Resultado:
+    """Una peticion del ataque y lo que contesto el servidor."""
+    n: int
+    payloads: list[str]
+    status: int | None = None
+    largo: int = 0
+    ms: int = 0
+    error: str = ""
+    grep: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Config:
+    """Como se lanza el ataque.
+
+    Los valores por defecto son prudentes a proposito: esto se dispara
+    contra sistemas de otros. Un Intruder que de fabrica tumba el entorno
+    de un cliente es una llamada telefonica, no un hallazgo. Subirlo es
+    una decision que el analista toma a la vista del objetivo.
+    """
+    modo: Modo
+    conjuntos: list[list[str]]
+    concurrencia: int = 4
+    por_segundo: float = 10.0
+    grep: list[str] = field(default_factory=list)
+    tls: bool | None = None
+    timeout: float = 15.0
+
+
+class _Acelerador:
+    """Un reloj compartido por todos los hilos del ataque.
+
+    El tope es del ataque entero, no de cada hilo. Con un sleep por hilo,
+    cuatro hilos a diez por segundo mandarian cuarenta sin que nadie lo
+    note, que es justo el accidente que el tope existe para evitar.
+
+    La espera ocurre FUERA del lock: dentro solo se reparte el turno.
+    """
+
+    def __init__(self, por_segundo: float):
+        self._intervalo = 1.0 / por_segundo if por_segundo > 0 else 0.0
+        self._lock = threading.Lock()
+        self._siguiente = 0.0
+
+    def esperar(self) -> None:
+        if not self._intervalo:
+            return
+        with self._lock:
+            turno = max(time.monotonic(), self._siguiente)
+            self._siguiente = turno + self._intervalo
+        falta = turno - time.monotonic()
+        if falta > 0:
+            time.sleep(falta)
+
+
+class Ataque:
+    """Un ataque configurado y listo para lanzar.
+
+    Todo lo que puede estar mal se comprueba en el constructor, antes de
+    abrir ningun socket: la peticion, los marcadores, los conjuntos y el
+    total. `total` y `avisos` estan disponibles sin lanzar, que es lo que
+    permite enseniarlos y pedir confirmacion antes de mandar nada.
+    """
+
+    def __init__(self, crudo: str, cfg: Config):
+        self.crudo = crudo
+        self.cfg = cfg
+        self.base = valores_iniciales(crudo)        # valida los marcadores
+        self._n_pos = len(self.base)
+        self.total = cuantas(cfg.modo, cfg.conjuntos, self._n_pos)
+        self.avisos = avisos_de_codificacion(
+            [p for c in cfg.conjuntos for p in c])
+        self.enviadas = 0
+        self.terminado = False
+        self._parar = threading.Event()
+        self._lock = threading.Lock()
+
+    @property
+    def abortado(self) -> bool:
+        return self._parar.is_set()
+
+    def abortar(self) -> None:
+        """Corta el ataque. Idempotente y seguro desde cualquier hilo.
+
+        No se matan los sockets que ya estan en vuelo: se dejan terminar
+        con su timeout. Cortar a mitad dejaria la peticion enviada y la
+        respuesta sin leer, que es el estado que uno menos quiere en el
+        sistema de un cliente.
+        """
+        self._parar.set()
+
+    def correr(self, on_resultado: Callable[[Resultado], None]) -> None:
+        """Lanza el ataque. Bloquea: llamalo desde un hilo.
+
+        `on_resultado` se invoca desde los hilos trabajadores, pero
+        serializado bajo un lock, asi que no hace falta que sea seguro
+        entre hilos. Lo que SI hace falta, en una interfaz, es saltar al
+        propio bucle —en Textual con call_from_thread—, el mismo contrato
+        que ya tiene Engine.on_flow.
+        """
+        acelerador = _Acelerador(self.cfg.por_segundo)
+        combos = combinar(self.cfg.modo, self.cfg.conjuntos,
+                          self._n_pos, self.base)
+        obreros = max(1, self.cfg.concurrencia)
+
+        def trabajo(n: int, payloads: list[str]) -> None:
+            if self._parar.is_set():
+                return
+            acelerador.esperar()
+            if self._parar.is_set():       # pudo abortarse durante la espera
+                return
+
+            flujo = repeater.send_raw(
+                sustituir(self.crudo, payloads),
+                tls=self.cfg.tls, timeout=self.cfg.timeout,
+            )
+            r = Resultado(n=n, payloads=payloads, error=flujo.error,
+                          ms=flujo.duration_ms)
+            if flujo.response is not None:
+                r.status = flujo.response.status
+                r.largo = len(flujo.response.body)
+                if self.cfg.grep:
+                    cuerpo = flujo.response.text()
+                    r.grep = [g for g in self.cfg.grep if g in cuerpo]
+            with self._lock:
+                self.enviadas += 1
+                on_resultado(r)
+
+        # Se mantienen pocos futuros vivos a la vez en vez de encolarlo
+        # todo: un racimo de un millon no cabe ni como lista de futuros.
+        tope = obreros * 4
+        pendientes: set[Future] = set()
+        try:
+            with ThreadPoolExecutor(max_workers=obreros,
+                                    thread_name_prefix="luzxfer-intruder") as ex:
+                for n, payloads in enumerate(combos):
+                    if self._parar.is_set():
+                        break
+                    pendientes.add(ex.submit(trabajo, n, payloads))
+                    if len(pendientes) >= tope:
+                        _, pendientes = wait(pendientes,
+                                             return_when=FIRST_COMPLETED)
+                wait(pendientes)
+        finally:
+            self.terminado = True
