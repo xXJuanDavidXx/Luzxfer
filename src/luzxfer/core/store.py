@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 from .models import Finding, Flow, Request, Response
@@ -67,6 +68,36 @@ CREATE TABLE IF NOT EXISTS meta (
     clave TEXT PRIMARY KEY,
     valor TEXT NOT NULL
 );
+
+-- Los ataques del Intruder van en sus propias tablas y NO en flows. Un
+-- ataque suelta facil diez mil peticiones: en el historial lo volverian
+-- inservible para lo que es, y el detector correria sobre las diez mil
+-- generando miles de candidatos basura. Lo que valga se promueve a mano.
+CREATE TABLE IF NOT EXISTS ataques (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    creado    REAL    NOT NULL,
+    modo      TEXT    NOT NULL,
+    host      TEXT    NOT NULL,
+    plantilla TEXT    NOT NULL,          -- la peticion cruda, con marcadores
+    total     INTEGER NOT NULL DEFAULT 0,
+    enviadas  INTEGER NOT NULL DEFAULT 0,
+    abortado  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS resultados (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ataque_id INTEGER NOT NULL,
+    n         INTEGER NOT NULL,
+    payloads  TEXT    NOT NULL DEFAULT '[]',
+    status    INTEGER,
+    largo     INTEGER NOT NULL DEFAULT 0,
+    ms        INTEGER NOT NULL DEFAULT 0,
+    error     TEXT    NOT NULL DEFAULT '',
+    grep      TEXT    NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS ix_res_ataque ON resultados(ataque_id);
+CREATE INDEX IF NOT EXISTS ix_res_largo  ON resultados(ataque_id, largo);
 """
 
 
@@ -287,6 +318,67 @@ class Store:
     def count_findings(self) -> int:
         with self._lock:
             return int(self._con.execute("SELECT COUNT(*) c FROM findings").fetchone()["c"])
+
+    # ------------------------------------------------- ataques del intruder
+    def add_ataque(self, modo: str, host: str, plantilla: str, total: int) -> int:
+        with self._lock:
+            cur = self._con.execute(
+                "INSERT INTO ataques (creado, modo, host, plantilla, total)"
+                " VALUES (?,?,?,?,?)",
+                (time.time(), modo, host, plantilla, total),
+            )
+            self._con.commit()
+            return int(cur.lastrowid)
+
+    def add_resultado(self, ataque_id: int, r) -> None:
+        """Guarda un resultado del Intruder.
+
+        Toma `r` por sus atributos y no por su tipo: asi el almacen no
+        importa intruder.py, y la herramienta puede cambiar sin arrastrar
+        al almacen detras.
+        """
+        with self._lock:
+            self._con.execute(
+                "INSERT INTO resultados (ataque_id, n, payloads, status,"
+                " largo, ms, error, grep) VALUES (?,?,?,?,?,?,?,?)",
+                (ataque_id, r.n, json.dumps(list(r.payloads)), r.status,
+                 r.largo, r.ms, r.error, json.dumps(list(r.grep))),
+            )
+            self._con.commit()
+
+    def cerrar_ataque(self, ataque_id: int, enviadas: int, abortado: bool) -> None:
+        with self._lock:
+            self._con.execute(
+                "UPDATE ataques SET enviadas=?, abortado=? WHERE id=?",
+                (enviadas, int(abortado), ataque_id),
+            )
+            self._con.commit()
+
+    def list_ataques(self) -> list[dict]:
+        with self._lock:
+            filas = self._con.execute(
+                "SELECT * FROM ataques ORDER BY id DESC").fetchall()
+        return [dict(f) for f in filas]
+
+    def list_resultados(self, ataque_id: int, *, limite: int = 10_000) -> list[dict]:
+        with self._lock:
+            filas = self._con.execute(
+                "SELECT * FROM resultados WHERE ataque_id=? ORDER BY n LIMIT ?",
+                (ataque_id, limite),
+            ).fetchall()
+        return [dict(f) for f in filas]
+
+    def borrar_ataque(self, ataque_id: int) -> None:
+        """Se lleva el ataque y sus resultados.
+
+        El borrado en cascada va a mano y no con ON DELETE CASCADE porque
+        sqlite3 no activa las claves foraneas por defecto, y depender de
+        un PRAGMA que alguien puede no poner seria dejar huerfanos.
+        """
+        with self._lock:
+            self._con.execute("DELETE FROM resultados WHERE ataque_id=?", (ataque_id,))
+            self._con.execute("DELETE FROM ataques WHERE id=?", (ataque_id,))
+            self._con.commit()
 
     # ------------------------------------------------------------------
     def get_meta(self, clave: str, defecto: str = "") -> str:

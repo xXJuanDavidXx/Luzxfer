@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import http.server
+import json
+import sqlite3
 import threading
 import time
 import urllib.request
+from types import SimpleNamespace
 
 import pytest
 
@@ -365,3 +368,122 @@ def test_meta_sobrevive_al_reinicio(tmp_path):
     otra = Store(ruta)
     assert otra.get_meta("vista") == "juntas"
     otra.close()
+
+
+# ----------------------------------------------- ataques del intruder
+def _res(n, **kw):
+    kw.setdefault("payloads", [f"p{n}"])
+    kw.setdefault("status", 200)
+    kw.setdefault("largo", 10 + n)
+    kw.setdefault("ms", 5)
+    kw.setdefault("error", "")
+    kw.setdefault("grep", [])
+    return SimpleNamespace(n=n, **kw)
+
+
+def test_store_guarda_un_ataque_con_sus_resultados(tmp_path):
+    st = Store(tmp_path / "s.db")
+    aid = st.add_ataque("sniper", "o.com", "GET /?q=§X§ ...", total=3)
+    for n in range(3):
+        st.add_resultado(aid, _res(n, grep=["AGUJA"] if n == 1 else []))
+    st.cerrar_ataque(aid, enviadas=3, abortado=False)
+
+    ataques = st.list_ataques()
+    assert len(ataques) == 1
+    assert ataques[0]["total"] == 3 and ataques[0]["enviadas"] == 3
+    assert ataques[0]["abortado"] == 0
+    assert ataques[0]["modo"] == "sniper"
+
+    r = st.list_resultados(aid)
+    assert [x["n"] for x in r] == [0, 1, 2]
+    assert json.loads(r[1]["grep"]) == ["AGUJA"]
+    assert json.loads(r[0]["payloads"]) == ["p0"]
+    st.close()
+
+
+def test_los_resultados_no_entran_al_historial(tmp_path):
+    """Decision de diseno: 10.000 filas volverian el historial inservible
+    para lo que es, y el detector correria sobre las 10.000 generando
+    miles de candidatos basura."""
+    st = Store(tmp_path / "s.db")
+    aid = st.add_ataque("sniper", "o.com", "x", total=1)
+    st.add_resultado(aid, _res(0))
+    assert st.count_flows() == 0
+    assert st.count_findings() == 0
+    st.close()
+
+
+def test_un_ataque_abortado_queda_marcado(tmp_path):
+    st = Store(tmp_path / "s.db")
+    aid = st.add_ataque("racimo", "o.com", "x", total=500)
+    st.add_resultado(aid, _res(0))
+    st.cerrar_ataque(aid, enviadas=1, abortado=True)
+    a = st.list_ataques()[0]
+    assert a["abortado"] == 1 and a["enviadas"] == 1 and a["total"] == 500
+    st.close()
+
+
+def test_los_resultados_de_un_ataque_no_se_mezclan_con_los_de_otro(tmp_path):
+    st = Store(tmp_path / "s.db")
+    a1 = st.add_ataque("sniper", "o.com", "x", total=2)
+    a2 = st.add_ataque("ariete", "o.com", "y", total=1)
+    st.add_resultado(a1, _res(0))
+    st.add_resultado(a1, _res(1))
+    st.add_resultado(a2, _res(0))
+    assert len(st.list_resultados(a1)) == 2
+    assert len(st.list_resultados(a2)) == 1
+    st.close()
+
+
+def test_los_ataques_sobreviven_al_reinicio(tmp_path):
+    ruta = tmp_path / "s.db"
+    st = Store(ruta)
+    aid = st.add_ataque("sniper", "o.com", "GET /?q=§X§", total=1)
+    st.add_resultado(aid, _res(0, grep=["admin"]))
+    st.cerrar_ataque(aid, enviadas=1, abortado=False)
+    st.close()
+
+    otra = Store(ruta)
+    assert otra.list_ataques()[0]["plantilla"] == "GET /?q=§X§"
+    assert json.loads(otra.list_resultados(aid)[0]["grep"]) == ["admin"]
+    otra.close()
+
+
+def test_borrar_un_ataque_se_lleva_sus_resultados(tmp_path):
+    st = Store(tmp_path / "s.db")
+    aid = st.add_ataque("sniper", "o.com", "x", total=1)
+    st.add_resultado(aid, _res(0))
+    st.borrar_ataque(aid)
+    assert st.list_ataques() == []
+    assert st.list_resultados(aid) == []
+    st.close()
+
+
+def test_una_sesion_de_la_0_2_0_se_abre_sin_migracion(tmp_path):
+    """Las tablas nuevas van con IF NOT EXISTS: abrir una sesion vieja no
+    debe fallar ni perder lo que ya tenia dentro."""
+    ruta = tmp_path / "vieja.db"
+    con = sqlite3.connect(ruta)
+    con.executescript(
+        "CREATE TABLE flows (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "started REAL NOT NULL, duration_ms INTEGER NOT NULL DEFAULT 0, "
+        "source TEXT NOT NULL DEFAULT 'proxy', method TEXT NOT NULL, "
+        "url TEXT NOT NULL, host TEXT NOT NULL, path TEXT NOT NULL, "
+        "req_version TEXT NOT NULL DEFAULT 'HTTP/1.1', "
+        "req_headers TEXT NOT NULL DEFAULT '[]', req_body BLOB, "
+        "status INTEGER, reason TEXT NOT NULL DEFAULT '', "
+        "resp_version TEXT NOT NULL DEFAULT 'HTTP/1.1', "
+        "resp_headers TEXT NOT NULL DEFAULT '[]', resp_body BLOB, "
+        "content_type TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0, "
+        "note TEXT NOT NULL DEFAULT '', marked INTEGER NOT NULL DEFAULT 0, "
+        "error TEXT NOT NULL DEFAULT '');"
+        "INSERT INTO flows (started, method, url, host, path) "
+        "VALUES (1.0, 'GET', 'http://o.com/x', 'o.com', '/x');"
+    )
+    con.commit()
+    con.close()
+
+    st = Store(ruta)
+    assert st.count_flows() == 1          # lo viejo sigue ahi
+    assert st.list_ataques() == []        # lo nuevo existe y esta vacio
+    st.close()
