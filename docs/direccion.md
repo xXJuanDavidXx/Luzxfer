@@ -146,6 +146,25 @@ se rediseña la capacidad o va en un extra opcional.
 7. **Cada incremento deja la herramienta funcionando**, con sus tests y con
    `ruff` limpio. TDD: el test primero, comprobado en rojo.
 
+## Decisiones del Intruder (2026-10-31)
+
+Tomadas antes de escribir una línea, para no rediscutirlas a mitad:
+
+1. **Los cuatro modos de Burp** — sniper, ariete, horquilla, racimo. Comparten
+   el mismo motor de envío y solo cambian en cómo combinan los conjuntos de
+   payloads: una función con cuatro ramas, no cuatro implementaciones.
+2. **Marcadores `§`, como Burp**, insertados con una tecla porque `§` no está
+   en la mayoría de teclados. Así una petición copiada de Burp se pega y
+   funciona.
+3. **Ritmo prudente por defecto**: 4 concurrentes, tope de 10 peticiones por
+   segundo, ritmo visible mientras corre y tecla para abortar. Subirlo es
+   explícito. Un Intruder que por defecto tumba el entorno de un cliente es
+   una llamada telefónica, no un hallazgo.
+4. **Resultados en tabla aparte**, no en el historial. Dos razones concretas:
+   10.000 filas vuelven el historial inservible para lo que es, y el detector
+   correría sobre las 10.000 generando miles de candidatos basura. Lo que
+   valga se promueve al historial a mano.
+
 ## Bitácora
 
 Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
