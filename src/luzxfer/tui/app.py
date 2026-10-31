@@ -84,8 +84,10 @@ class LuzxferApp(App):
         port: int = 8080,
         upstream: str | None = None,
         arrancar_motor: bool = True,
+        filtrar_encoding: bool = True,
     ):
         super().__init__()
+        self.filtrar_encoding = filtrar_encoding
         self.store = Store(db)
         self.sesion = sesion
         if sesion:
@@ -158,6 +160,7 @@ class LuzxferApp(App):
         self.engine = Builtin(
             self._flujo_desde_hilo,
             host=self.host_proxy, port=self.port_proxy, upstream=self.upstream,
+            filtrar_encoding=self.filtrar_encoding,
         )
         self.engine.start()
         destino = f" → {self.upstream}" if self.upstream else ""
@@ -292,15 +295,27 @@ class LuzxferApp(App):
                 Text("sin respuesta", style="italic #5c6578"))
             return
 
-        cuerpo = f.response.text(200_000)
-        if len(f.response.body) > 200_000:
+        r = f.response
+        cuerpo = r.text(200_000)
+        # sobre el cuerpo YA descomprimido: medirlo comprimido decia
+        # «truncado» cuando no lo estaba
+        if len(r.decoded_body()) > 200_000:
             cuerpo += "\n\n…(truncado)"
-        self.query_one("#panel-resp", Static).update(
-            Text.assemble(
-                (f.response.raw_headers() + "\n\n", "#7b8496"),
-                (cuerpo, "#c7cdd9"),
-            )
-        )
+
+        partes = [(r.raw_headers() + "\n\n", "#7b8496")]
+        if r.sin_decodificar():
+            # callarlo hace parecer que el servidor contesto basura, y de
+            # paso esconde que el detector no pudo leer este cuerpo
+            partes.append((
+                f"⚠ cuerpo en '{r.encoding}' sin decodificar: luzxfer no sabe\n"
+                f"  deshacer esa compresion. Lo de abajo son los bytes crudos,\n"
+                f"  y el detector tampoco pudo leerlos: aqui no busques\n"
+                f"  candidatos, no los va a haber.\n"
+                f"  Por el proxy no deberia pasar; si pasa, el servidor ignoro\n"
+                f"  el Accept-Encoding. Solucion:  pip install 'luzxfer[br]'\n\n",
+                "#f0a93b"))
+        partes.append((cuerpo, "#c7cdd9"))
+        self.query_one("#panel-resp", Static).update(Text.assemble(*partes))
 
     def on_input_changed(self, ev: Input.Changed) -> None:
         if ev.input.id == "filtro":

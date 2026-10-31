@@ -56,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="archivo de sesion en una ruta concreta, en vez de una "
                          "sesion con nombre. Gana sobre -s. Usa ':memory:' para "
                          "una sesion que se pierda al salir")
+    ap.add_argument("--conservar-encoding", action="store_true",
+                    help="no recortar el Accept-Encoding del cliente. Por "
+                         "defecto se le quita lo que luzxfer no sabe deshacer "
+                         "(brotli y zstd), porque si no el detector se queda "
+                         "ciego buscando reflejos en bytes comprimidos")
     ap.add_argument("--no-engine", action="store_true",
                     help="no arrancar el proxy: solo revisar una sesion guardada")
     ap.add_argument("--version", action="store_true")
@@ -105,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         db=ruta, sesion=nombre,
         host=a.host, port=a.port, upstream=a.upstream,
         arrancar_motor=not a.no_engine,
+        filtrar_encoding=not a.conservar_encoding,
     )
     app.run()
     return 0

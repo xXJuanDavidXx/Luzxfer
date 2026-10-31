@@ -415,3 +415,121 @@ async def test_el_aviso_de_truncado_respeta_el_filtro(monkeypatch):
         app.actualizar_estado()
         await pilot.pause()
         assert "mostrando 5 de 11" in app.query_one("#estado", Static).render().plain
+
+
+# ------------------------------------------------------------ 6. brotli
+def _ae_que_vio_el_servidor(datos: dict) -> str:
+    return next(v for k, v in datos["cabeceras"] if k.lower() == "accept-encoding")
+
+
+def test_el_proxy_no_pide_al_servidor_lo_que_no_sabe_deshacer(eco):
+    """El fallo de verdad no es el cuerpo ilegible en pantalla: es que el
+    detector busca reflejos en los bytes comprimidos y no encuentra NADA.
+    Falso negativo silencioso, y con brotli por defecto en nginx, Cloudflare
+    y Express, es el caso comun y no el raro."""
+    datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                            b"Accept-Encoding: gzip, deflate, br, zstd\r\n"
+                            b"Connection: close\r\n\r\n")
+    ae = _ae_que_vio_el_servidor(datos)
+    assert "br" not in ae and "zstd" not in ae
+    assert "gzip" in ae and "deflate" in ae
+
+
+def test_el_proxy_conserva_el_orden_y_los_q_de_accept_encoding(eco):
+    """Se recorta, no se reemplaza: cuanto menos se toque la peticion del
+    cliente, menos se cambia lo que el servidor decide."""
+    datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                            b"Accept-Encoding: gzip;q=0.8, br;q=1.0, deflate;q=0.5\r\n"
+                            b"Connection: close\r\n\r\n")
+    ae = _ae_que_vio_el_servidor(datos)
+    assert ae == "gzip;q=0.8, deflate;q=0.5"
+
+
+def test_si_el_cliente_solo_pide_lo_ilegible_se_manda_identity(eco):
+    datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                            b"Accept-Encoding: br\r\nConnection: close\r\n\r\n")
+    assert _ae_que_vio_el_servidor(datos) == "identity"
+
+
+def test_el_comodin_de_accept_encoding_no_pasa(eco):
+    """'*' deja al servidor elegir, y eso incluye brotli."""
+    datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                            b"Accept-Encoding: *\r\nConnection: close\r\n\r\n")
+    assert _ae_que_vio_el_servidor(datos) == "identity"
+
+
+def test_sin_accept_encoding_no_se_inventa_ninguno(eco):
+    datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                            b"Connection: close\r\n\r\n")
+    assert not any(k.lower() == "accept-encoding" for k, v in datos["cabeceras"])
+
+
+def test_se_puede_conservar_el_accept_encoding_original(eco):
+    """Para quien este probando justamente como responde el servidor a
+    distintas codificaciones."""
+    import socket
+    h, p = eco
+    motor = Builtin(lambda f: None, port=0, upstream=f"http://{h}:{p}",
+                    filtrar_encoding=False)
+    motor.start()
+    puerto = motor._srv.server_address[1]
+    try:
+        s = socket.create_connection(("127.0.0.1", puerto), timeout=10)
+        s.sendall(b"GET /eco HTTP/1.1\r\nHost: x\r\n"
+                  b"Accept-Encoding: gzip, br\r\nConnection: close\r\n\r\n")
+        r = http.client.HTTPResponse(s)
+        r.begin()
+        datos = json.loads(r.read())
+        s.close()
+    finally:
+        motor.stop()
+    assert "br" in _ae_que_vio_el_servidor(datos)
+
+
+def test_filtrar_accept_encoding_es_la_unica_fuente_de_verdad():
+    from luzxfer.core.models import CODIFICACIONES_LEGIBLES, filtrar_accept_encoding
+
+    assert "gzip" in CODIFICACIONES_LEGIBLES and "deflate" in CODIFICACIONES_LEGIBLES
+    for enc in CODIFICACIONES_LEGIBLES:
+        assert filtrar_accept_encoding(enc) == enc
+    assert filtrar_accept_encoding("") == "identity"
+
+
+async def test_el_panel_avisa_si_el_cuerpo_quedo_sin_decodificar():
+    """Antes el repeater avisaba y el panel principal mostraba los bytes
+    crudos sin decir nada, asi que parecia una respuesta rota del servidor."""
+    from luzxfer.core.models import CODIFICACIONES_LEGIBLES
+    if "br" in CODIFICACIONES_LEGIBLES:
+        pytest.skip("brotli instalado: aqui el cuerpo si se decodifica")
+
+    f = Flow(
+        request=Request(method="GET", url="http://ej.com/x", headers=[("Host", "ej.com")]),
+        response=Response(status=200, reason="OK", body=b"\x1b\x0e\x00\x00basura",
+                          headers=[("Content-Type", "text/html"),
+                                   ("Content-Encoding", "br")]),
+    )
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        app._ingresar(f)
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        assert "sin decodificar" in app.query_one("#panel-resp", Static).render().plain
+
+
+async def test_gzip_no_genera_aviso_porque_si_se_decodifica():
+    f = Flow(
+        request=Request(method="GET", url="http://ej.com/x", headers=[("Host", "ej.com")]),
+        response=Response(status=200, reason="OK",
+                          body=gzip.compress(b"<html>hola</html>"),
+                          headers=[("Content-Type", "text/html"),
+                                   ("Content-Encoding", "gzip")]),
+    )
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        app._ingresar(f)
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        panel = app.query_one("#panel-resp", Static).render().plain
+        assert "hola" in panel and "sin decodificar" not in panel

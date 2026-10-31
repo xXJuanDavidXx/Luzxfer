@@ -21,7 +21,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from ..models import HOP_BY_HOP, Flow, Request, Response
+from ..models import HOP_BY_HOP, Flow, Request, Response, filtrar_accept_encoding
 from .base import Engine, EngineInfo
 
 AVISO_CONNECT = (
@@ -85,6 +85,10 @@ class _Handler(BaseHTTPRequestHandler):
                 continue
             if k.lower() == "host":
                 v = f"{destino[0]}:{destino[1]}" if destino[1] != 80 else destino[0]
+            elif k.lower() == "accept-encoding" and self.engine.filtrar_encoding:
+                # sin esto el servidor contesta en brotli y el detector se
+                # queda ciego buscando reflejos en bytes comprimidos
+                v = filtrar_accept_encoding(v)
             salida.append((k, v))
         # el cuerpo se reenvia entero (ya des-chunkeado), con su largo real
         if cuerpo or self.command in ("POST", "PUT", "PATCH"):
@@ -150,9 +154,15 @@ class _Handler(BaseHTTPRequestHandler):
 class Builtin(Engine):
     """Motor integrado. `upstream` activa el modo inverso."""
 
-    def __init__(self, on_flow, *, host="127.0.0.1", port=8080, upstream: str | None = None):
+    def __init__(self, on_flow, *, host="127.0.0.1", port=8080,
+                 upstream: str | None = None, filtrar_encoding: bool = True):
+        """`filtrar_encoding` recorta el Accept-Encoding del cliente a lo
+        que luzxfer sabe deshacer. Encendido por defecto porque un cuerpo
+        en brotli deja al detector ciego; se apaga para quien este
+        probando justamente como responde el servidor a cada codificacion."""
         super().__init__(on_flow, host=host, port=port)
         self.upstream = upstream
+        self.filtrar_encoding = filtrar_encoding
         self._srv: ThreadingHTTPServer | None = None
         self._hilo: threading.Thread | None = None
 

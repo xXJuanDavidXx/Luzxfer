@@ -110,9 +110,7 @@ class RepeaterScreen(ModalScreen):
         cuerpo = r.text(100_000)
         if len(r.decoded_body()) > 100_000:
             cuerpo += "\n\n…(truncado)"
-        nota = ""
-        if r.encoding and r.encoding not in ("gzip", "x-gzip", "deflate", "identity"):
-            nota = f"  ({r.encoding} sin decodificar)"
+        nota = f"  ({r.encoding} sin decodificar)" if r.sin_decodificar() else ""
         salida.update(
             Text.assemble(
                 (f"{r.status} {r.reason}", f"bold {color}"),

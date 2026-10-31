@@ -18,6 +18,44 @@ HOP_BY_HOP = frozenset({
     "te", "trailers", "transfer-encoding", "upgrade",
 })
 
+try:                                    # extra opcional: pip install luzxfer[br]
+    import brotli as _brotli
+except ImportError:
+    try:
+        import brotlicffi as _brotli  # la variante cffi, misma interfaz
+    except ImportError:
+        _brotli = None                  # type: ignore[assignment]
+
+# Lo que luzxfer sabe deshacer, y la UNICA fuente de verdad sobre eso: el
+# motor la usa para recortar el Accept-Encoding que manda al servidor, y la
+# interfaz para avisar cuando un cuerpo quedo sin decodificar. Dos listas
+# que se separen con el tiempo serian un cuerpo ilegible sin aviso.
+CODIFICACIONES_LEGIBLES = frozenset(
+    {"gzip", "x-gzip", "deflate", "identity"} | ({"br"} if _brotli else set())
+)
+
+
+def filtrar_accept_encoding(valor: str) -> str:
+    """Recorta un Accept-Encoding a lo que luzxfer sabe deshacer.
+
+    Sin esto, un servidor moderno contesta en brotli —el default de nginx,
+    de Cloudflare y del middleware de compresion de Express— y el dano no
+    es solo que el cuerpo salga ilegible en pantalla: el detector busca
+    reflejos en los bytes comprimidos y no encuentra NADA. Es un falso
+    negativo silencioso, el mismo fallo que ya se corrigio para gzip, y hoy
+    es el caso comun y no el raro.
+
+    Se recorta en vez de reemplazar, conservando orden y parametros q=:
+    cuanto menos se toque la peticion del cliente, menos se cambia lo que
+    el servidor decide. El comodin '*' no sobrevive, porque deja al
+    servidor elegir y eso incluye justo lo que no sabemos leer.
+    """
+    partes = [
+        p.strip() for p in valor.split(",")
+        if p.split(";")[0].strip().lower() in CODIFICACIONES_LEGIBLES
+    ]
+    return ", ".join(partes) if partes else "identity"
+
 
 @dataclass(slots=True)
 class Request:
@@ -90,7 +128,12 @@ class Response:
         `body` se guarda tal como vino del servidor (es lo que se reenvia y
         es la evidencia). Pero buscar reflejos en bytes gzip no encuentra
         nada, y los objetivos reales comprimen casi todo el HTML.
-        Brotli no esta en la stdlib: esos cuerpos quedan sin decodificar.
+
+        Brotli no esta en la stdlib. Hay dos respuestas y las dos estan
+        puestas: el motor recorta el Accept-Encoding para que el servidor
+        no lo use (filtrar_accept_encoding), y si ademas esta instalado el
+        extra [br] se descomprime aqui. Si ni lo uno ni lo otro, el cuerpo
+        queda tal cual y la interfaz lo dice en vez de callarlo.
         """
         enc = self.encoding
         if not enc or enc == "identity":
@@ -103,9 +146,18 @@ class Response:
                     return zlib.decompress(self.body)
                 except zlib.error:            # deflate crudo, sin cabecera zlib
                     return zlib.decompress(self.body, -zlib.MAX_WBITS)
-        except (OSError, zlib.error, EOFError):
-            pass                              # cuerpo corrupto: se muestra tal cual
+            if enc == "br" and _brotli is not None:
+                return _brotli.decompress(self.body)
+        except Exception:
+            # Amplio a proposito: esto procesa bytes de un servidor hostil, y
+            # cada descompresor lanza lo suyo. Un cuerpo corrupto se muestra
+            # tal cual; tumbar la interfaz seria el peor resultado posible.
+            pass
         return self.body
+
+    def sin_decodificar(self) -> bool:
+        """Si el cuerpo quedo comprimido porque no sabemos deshacerlo."""
+        return bool(self.encoding) and self.encoding not in CODIFICACIONES_LEGIBLES
 
     def text(self, limite: int | None = None) -> str:
         datos = self.decoded_body()

@@ -143,6 +143,14 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
 - **2026-10-31** — IA aplazada sin fecha (decisión 3). Tareas 1 a 4 del plan
   hechas: sesiones con nombre, persistentes por defecto, con selector en la
   TUI. 103 tests. El historial ya no se pierde al salir.
+- **2026-10-31** — Brotli, reportado por el usuario contra OWASP Juice Shop,
+  reclasificado de cosmético a **grave y corregido fuera de turno**. No era
+  «el cuerpo se ve feo»: `decoded_body()` devolvía los bytes comprimidos, así
+  que el detector buscaba reflejos en basura binaria y no encontraba nada —
+  falso negativo silencioso, en el caso común y no en el raro. El motor
+  recorta ahora el `Accept-Encoding`, que es la única solución que también
+  funciona en Termux. La lección para lo que viene: **todo lo que el detector
+  no pueda leer tiene que gritarlo, nunca devolver lista vacía en silencio.**
 - **2026-10-31** — Pedido de estilo del usuario, añadido al plan como Tarea 10:
   un botón al estilo Burp para ver petición y respuesta **juntas**, con la
   vista de pestañas de hoy intacta como opción. Primer uso de la tabla `meta`,
