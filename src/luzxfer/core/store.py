@@ -75,13 +75,17 @@ def _cab(texto: str) -> list[tuple[str, str]]:
 
 
 class Store:
-    def __init__(self, ruta: str | Path = ":memory:"):
+    def __init__(self, ruta: str | Path = ":memory:", *, timeout: float = 5.0):
+        """`timeout` son los segundos que se espera a que se libere un
+        bloqueo antes de fallar. Importa porque add_flow() se llama desde
+        el bucle de la interfaz: si otra instancia tiene la sesion tomada,
+        ese tiempo es interfaz congelada."""
         self.ruta = str(ruta)
         if self.ruta != ":memory:":
             Path(self.ruta).parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False + lock: el motor escribe desde hilos y la
         # TUI lee desde el bucle de asyncio.
-        self._con = sqlite3.connect(self.ruta, check_same_thread=False)
+        self._con = sqlite3.connect(self.ruta, check_same_thread=False, timeout=timeout)
         self._con.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         with self._lock:

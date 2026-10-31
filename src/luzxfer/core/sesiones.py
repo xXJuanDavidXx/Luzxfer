@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import os
 import re
+import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
 NOMBRE_DEFECTO = "predeterminada"
@@ -66,3 +68,87 @@ def valida_nombre(nombre: str) -> str:
 def ruta_de(nombre: str) -> Path:
     """El archivo de esa sesion. Valida antes de construir la ruta."""
     return dir_sesiones() / f"{valida_nombre(nombre)}.db"
+
+
+@dataclass(slots=True)
+class ResumenSesion:
+    """Lo que hace falta para elegir una sesion sin abrirla."""
+    nombre: str
+    ruta: Path
+    flujos: int = 0
+    candidatos: int = 0
+    modificada: float = 0.0
+    ilegible: bool = False
+
+
+def _contar(ruta: Path, extra: str = "") -> tuple[int, int]:
+    """(flujos, candidatos) de una sesion, abierta en solo lectura."""
+    con = sqlite3.connect(f"file:{ruta}?mode=ro{extra}", uri=True)
+    try:
+        return (
+            int(con.execute("SELECT COUNT(*) FROM flows").fetchone()[0]),
+            int(con.execute("SELECT COUNT(*) FROM findings").fetchone()[0]),
+        )
+    finally:
+        con.close()
+
+
+def resumen(ruta: Path) -> ResumenSesion:
+    """Cuenta flujos y candidatos SIN abrir la sesion en escritura.
+
+    Va por mode=ro y no por Store a proposito: Store ejecuta el esquema al
+    conectar, asi que listar el directorio convertiria cualquier archivo
+    suelto en una sesion vacia recien creada.
+
+    Pero mode=ro no es gratis: leer una base en modo WAL necesita el indice
+    de memoria compartida, asi que SQLite crea -shm y -wal aunque solo se
+    lea, y una conexion de solo lectura no puede borrarlos al cerrar. Los
+    limpia la siguiente conexion de escritura. Es basura inofensiva y es el
+    precio de leer una sesion que otra instancia puede tener abierta: con
+    el WAL a la vista los contadores salen correctos, y con immutable=1
+    saldrian viejos.
+
+    El respaldo con immutable=1 es para cuando el directorio no se puede
+    escribir — sesiones en un medio de solo lectura, que es como se guarda
+    evidencia. Ahi no hay -shm posible, y sin este segundo intento toda
+    sesion sana se reportaria como ilegible, que es una mentira peor que
+    la basura.
+
+    Un archivo que no es SQLite no falla al conectar sino al consultar, asi
+    que el try cubre las consultas y no solo el connect.
+    """
+    try:
+        modificada = ruta.stat().st_mtime
+    except OSError:
+        modificada = 0.0
+
+    r = ResumenSesion(nombre=ruta.stem, ruta=ruta, modificada=modificada)
+    for extra in ("", "&immutable=1"):
+        try:
+            r.flujos, r.candidatos = _contar(ruta, extra)
+            return r
+        except sqlite3.Error:
+            continue
+    r.ilegible = True              # corrupto, ajeno o de otra version
+    return r
+
+
+def listar() -> list[ResumenSesion]:
+    """Las sesiones que hay, de la mas reciente a la mas vieja."""
+    base = dir_sesiones()
+    if not base.is_dir():
+        return []
+    salida = [resumen(p) for p in base.glob("*.db") if p.is_file()]
+    salida.sort(key=lambda s: s.modificada, reverse=True)
+    return salida
+
+
+def borrar(nombre: str) -> None:
+    """Borra la sesion y los auxiliares del WAL. Inexistente: no hace nada.
+
+    Valida el nombre igual que todo lo demas. Es la operacion destructiva
+    del modulo, asi que con mas razon.
+    """
+    ruta = ruta_de(nombre)
+    for p in (ruta, ruta.with_suffix(".db-wal"), ruta.with_suffix(".db-shm")):
+        p.unlink(missing_ok=True)
