@@ -7,8 +7,9 @@ rather than around requests: it tracks which tests you have run against which
 endpoints, ties findings to the traffic that proves them, and keeps that state
 across sessions.
 
-> **Status: alpha.** The core, the history and the repeater work. Intruder,
-> sitemap and the WSTG coverage matrix are not built yet. See the roadmap.
+> **Status: alpha.** The core, named sessions, the history and the repeater
+> work. Intruder, sitemap, scope and the WSTG coverage matrix are not built
+> yet. See the roadmap.
 
 ---
 
@@ -27,8 +28,12 @@ three gaps:
 
 ## Install
 
+Not on PyPI yet. From source:
+
 ```bash
-pip install luzxfer
+git clone https://github.com/xXJuanDavidXx/luzxfer
+cd luzxfer
+pip install -e .
 ```
 
 Python 3.10+. The only runtime dependency is [Textual](https://textual.textualize.io/).
@@ -36,21 +41,43 @@ Everything else is the standard library, deliberately: that is what keeps it
 installable on Termux, where there are no prebuilt wheels and any C or Rust
 extension is compiled on the phone.
 
-For HTTPS interception you also need the mitmproxy engine:
+Two optional extras, both of which compile and therefore neither of which
+works on Termux — that is why they are extras and not dependencies:
 
 ```bash
-pip install 'luzxfer[mitm]'
+pip install -e '.[mitm]'   # HTTPS interception
+pip install -e '.[br]'     # read brotli bodies (see Compression)
 ```
 
 ## Use
 
 ```bash
-luzxfer                                  # proxy on 127.0.0.1:8080
-luzxfer -p 9090                          # another port
-luzxfer -u http://127.0.0.1:8099         # reverse mode, for a local lab
-luzxfer -d ~/work/target.db              # persist the session
-luzxfer --no-engine -d ~/work/target.db  # review a saved session
+luzxfer                              # resumes your last session, proxy on :8080
+luzxfer -s acme-corp                 # open or create a named session
+luzxfer --sesiones                   # list what is saved, then exit
+luzxfer -p 9090                      # another port
+luzxfer -u http://127.0.0.1:8099     # reverse mode, for a local lab
+luzxfer -s acme-corp --no-engine     # review a session without starting the proxy
+luzxfer -d ~/work/target.db          # a session file at a path you choose
+luzxfer -d :memory:                  # throwaway, lost on exit
 ```
+
+### Sessions
+
+**Closing luzxfer does not lose your history.** Sessions live in
+`~/.local/share/luzxfer/sesiones/` (or under `$XDG_DATA_HOME`), one SQLite
+file each, holding the traffic, the candidates, your notes and your marks.
+Running with no arguments reopens the last one you used.
+
+`s` opens the session picker: what is saved, how much is in each, which one
+is open. It reads read-only, so looking does not touch anything. It will not
+delete the session you have open — the `Store` would keep writing to a file
+that is gone and you would lose the day's work.
+
+Session names are checked against a whitelist (letters, digits, `.`, `_`,
+`-`, starting alphanumeric, 64 max). The name becomes a filename, and a tool
+that forwards arbitrary requests has no business also writing arbitrary
+paths.
 
 **Reverse mode matters more than it looks.** Chromium-based browsers never send
 `localhost` or `127.0.0.1` through a configured proxy — it is an implicit bypass
@@ -65,10 +92,19 @@ configuring a system proxy that would be ignored.
 | `j` / `k` or arrows | move through the history |
 | `f` | focus the filter |
 | `r` | open the repeater on the selected flow |
+| `t` | toggle request+response side by side, and back |
+| `n` | write a note on the selected flow |
 | `m` | mark a flow |
+| `v` | confirm the selected candidate as a real finding |
+| `s` | sessions |
 | `c` | clear the history (findings are kept) |
 | `g` / `G` | first / last flow |
 | `q` | quit |
+
+`t` and the button next to the filter do the same thing: request and
+response in two columns instead of two tabs, the way Burp lets you lay them
+out. The candidates tab stays reachable either way, and the choice is
+remembered with the session.
 
 Inside the repeater: `ctrl+s` sends, `esc` closes. `Content-Length` is
 recalculated on send, because editing a raw request by hand and forgetting it
@@ -92,6 +128,29 @@ leaks, server errors. Each one carries the WSTG IDs it maps to.
 escaped in the context where it lands. Server-wide issues are recorded once per
 host, not once per URL — repeating the same finding on every path is the noise
 that makes scanner output useless.
+
+You confirm, with `v`. That is the line between a candidate and a finding,
+and nothing but a human crosses it.
+
+## Compression
+
+The detector reads the *decoded* body, because searching for a reflection in
+gzip bytes finds nothing. gzip and deflate are standard library. Brotli is
+not — and brotli is what nginx, Cloudflare and Express' compression
+middleware reach for by default, so on a modern target this is the common
+case, not an edge one.
+
+So the proxy trims `br` (and anything else it cannot undo) out of the
+client's `Accept-Encoding` before forwarding. It trims rather than replaces,
+keeping the order and the `q=` values the client sent. Without this the
+detector goes quietly blind: it searches compressed bytes, finds nothing,
+and reports nothing — a false negative that leaves no trace.
+
+`--conservar-encoding` turns the trimming off, for when how the server
+responds to each encoding is the thing you are testing. `pip install
+'.[br]'` decodes brotli properly instead. If a body still arrives in
+something unreadable, the response pane says so and says the detector could
+not read it either, rather than showing you binary and keeping quiet.
 
 ## Engines
 
@@ -119,11 +178,18 @@ reach it from another machine, tunnel over SSH.
 - [x] Built-in HTTP engine (forward and reverse)
 - [x] History with filters, detail panes, candidates
 - [x] Repeater
+- [x] Named sessions, persistent by default, with a picker
+- [x] Notes, confirmed findings, side-by-side request/response
 - [ ] Intruder, four modes, with grep-match on results
 - [ ] Sitemap tree and scope
+- [ ] Intercept and edit in flight — the real gap against Burp today
+- [ ] DAST, on a leash: scope required, fired by hand, rate limited
 - [ ] WSTG coverage matrix and report generation
 - [ ] mitmproxy engine adapter
 - [ ] Plugin API
+
+`docs/direccion.md` has the reasoning behind that order, and why AI is
+deferred rather than planned.
 
 ## Contributing
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "luzxfer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Intercepting proxy and web pentesting workbench for the terminal"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,6 +35,10 @@ dependencies = [
 # El motor mitmproxy es opcional: da TLS, HTTP/2 y WebSockets, pero arrastra
 # cryptography (Rust). En PC se instala sin problema; en Termux no.
 mitm = ["mitmproxy>=10.0"]
+# Brotli. Sin esto, el motor le quita "br" al Accept-Encoding para que
+# el servidor no lo use; con esto ademas se pueden leer los cuerpos que
+# lleguen comprimidos asi de todas formas. Compila, no va en Termux.
+br = ["brotli>=1.1"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -46,8 +50,8 @@ dev = [
 luzxfer = "luzxfer.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/jdavid/luzxfer"
-Issues = "https://github.com/jdavid/luzxfer/issues"
+Homepage = "https://github.com/xXJuanDavidXx/luzxfer"
+Issues = "https://github.com/xXJuanDavidXx/luzxfer/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/luzxfer"]

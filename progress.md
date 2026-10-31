@@ -1,10 +1,11 @@
 # Estado del proyecto
 
-Bitácora de avance de **luzxfer 0.1.0**. Última verificación: **2026-10-31**.
+Bitácora de avance de **luzxfer 0.2.0**. Última verificación: **2026-10-31**.
 
 Este archivo dice en qué punto está la herramienta de verdad: qué está hecho y
-comprobado, qué está a medias, y qué falta. No repite lo que ya cuentan el
-README (para qué sirve) ni el historial de git (cómo se llegó aquí).
+comprobado, qué está a medias, y qué falta. No repite el README (qué es la
+herramienta), `docs/direccion.md` (hacia dónde va y por qué) ni el historial de
+git (cómo se llegó aquí).
 
 ---
 
@@ -14,139 +15,128 @@ Todo esto se corrió en esta máquina, no es recuerdo de la última sesión:
 
 | comprobación | resultado |
 | --- | --- |
-| `pytest` | **51 pasan**, 12,89 s, sin fallos ni saltados |
-| `ruff check src tests` | **limpio**, `All checks passed!` |
-| `luzxfer --version` | `luzxfer 0.1.0` |
-| `luzxfer --help` | arranca y muestra las seis opciones |
-| `git status` | limpio, sin cambios sin confirmar |
+| `./venv/bin/python -m pytest` | **136 pasan**, ~34 s, sin fallos ni saltados |
+| `./venv/bin/ruff check src tests` | **limpio**, `All checks passed!` |
+| `luzxfer --version` | `luzxfer 0.2.0` |
+| sesiones, de punta a punta | 7 flujos, salir, volver sin argumentos, 7 flujos |
+| brotli, contra Juice Shop real | `br` ilegible → `gzip` legible al filtrar |
+| vista combinada | izquierda x=2 ancho 66, derecha x=72 ancho 66 |
 
-**Un hallazgo del entorno:** el `venv/` no tenía las dependencias de
-desarrollo. Tenía `textual 8.2.8` y el paquete instalado en modo editable,
-pero ni `pytest`, ni `pytest-asyncio`, ni `ruff` — así que los 51 tests que
-declara el último commit no se podían correr sin instalarlos. Ya quedaron
-puestos (`pytest 9.2.0`, `pytest-asyncio 1.4.1`, `ruff`). El `python3` del
-sistema tiene pytest pero no textual, así que **los tests solo corren desde
-`./venv/bin/python -m pytest`**, no con el pytest del sistema.
+**Los tests solo corren desde `./venv/bin/python -m pytest`**: el `python3` del
+sistema tiene pytest pero no textual, y el venv tiene las dos cosas.
 
 ---
 
-## Lo que funciona
+## Qué cambió en la 0.2.0
 
-### Núcleo (`core/`)
+La razón del salto de versión es un **cambio de comportamiento por defecto**: la
+0.1.0 perdía el historial al salir y la 0.2.0 lo guarda.
 
-- **Modelos** (`models.py`, 161 líneas) — `Request`, `Response`, `Flow`,
-  `Finding`. Sin dependencias, que es lo que permite cambiar de motor sin
-  tocar nada más. `Response.decoded_body()` descomprime gzip y deflate para
-  analizar, mientras `body` guarda los bytes tal como vinieron, que son la
-  evidencia.
-- **Almacén SQLite** (`store.py`, 257 líneas) — stdlib a propósito, cero
-  dependencias nativas. WAL, índices por `started`/`host`/`status`, y
-  `UNIQUE(kind, detail, url)` en `findings`, que es lo que evita el ruido de
-  escáner. Sesión persistente entre arranques, o `:memory:` por defecto.
-- **Interfaz de motor** (`engine/base.py`) — `Engine` abstracto +
-  `EngineInfo` con las capacidades declaradas. Ninguna interfaz habla con un
-  motor concreto.
-- **Motor integrado** (`engine/builtin.py`, 228 líneas) — proxy directo e
-  inverso, solo stdlib. Lee cuerpos `chunked`, conserva cabeceras duplicadas
-  al reenviar, respeta `HEAD`, y contesta `CONNECT` con un 501 que explica el
-  motivo en vez de fallar callado.
-- **Repeater** (`tools/repeater.py`, 146 líneas) — socket crudo, no
-  `http.client`: lo que escribes es lo que viaja. Conserva duplicados y orden
-  de cabeceras, acepta métodos no estándar, habla TLS por su cuenta (así que
-  llega a HTTPS aunque el motor no intercepte), y solo recalcula
-  `Content-Length`.
-- **Detector de candidatos** (`tools/detector.py`, 124 líneas) — reflejos,
-  atributos de cookie, cabeceras de seguridad ausentes, fugas de versión,
-  errores 5xx. Cada candidato trae sus IDs WSTG. Lo del servidor se registra
-  **por host, no por URL**.
+### Sesiones (lo nuevo grande)
 
-### Interfaz (`tui/`)
+- El default deja de ser `:memory:`. Sin argumentos se retoma la última sesión;
+  `-s NOMBRE` abre o crea una; `--sesiones` las lista y sale; `s` abre el
+  selector dentro de la TUI.
+- Los nombres pasan por una **lista blanca**, porque el nombre lo escribe el
+  usuario y se vuelve una ruta de archivo. Sin eso, `-s ../otro` escribe fuera
+  del directorio.
+- El listado abre en **solo lectura**: asomarse no crea ni migra nada, y un
+  `.db` corrupto sale marcado como ilegible en vez de tumbar el selector. Con
+  el directorio de solo lectura —como se guarda evidencia— hay un respaldo con
+  `immutable=1`, sin el cual toda sesión sana se reportaría como ilegible.
+- **No se borra la sesión abierta**: el `Store` seguiría escribiendo en un
+  archivo que ya no está.
 
-- **App** (`app.py`, 346 líneas) — historial en `DataTable` con filtro por
-  URL, paneles de petición/respuesta, pestaña de candidatos, barra de estado
-  con contadores y estado del motor. Inserción **incremental**: un flujo nuevo
-  no reconstruye la tabla y no mueve la selección salvo que ya estuvieras al
-  final. Navegación vim (`j`/`k`/`g`/`G`), marcar (`m`), limpiar (`c`).
-- **Pantalla de repeater** (`screens/repeater.py`, 123 líneas) — modal con
-  editor, envío en worker (la red nunca en el hilo de la interfaz), y salida
-  desplazable. Sus flujos entran al historial y pasan por el detector.
+### Los seis cabos sueltos de la 0.1.0, cerrados
 
-### Tests (878 líneas, 51 casos en 3 archivos)
+1. ~~`Store.set_note()` sin forma de llamarse~~ → tecla `n`, con la nota
+   precargada al reabrir y vacía para borrarla.
+2. ~~`Finding` con cuatro campos que nada escribía~~ → `v` confirma un
+   candidato. **`severity`, `cvss_vector` y `justification` siguen dormidos a
+   propósito**, esperando al reporte: inventarles interfaz ahora sería
+   construir contra un formato de entregable que no está decidido.
+3. ~~Truncado silencioso a 1000 flujos~~ → límite explícito de 5000 y la barra
+   dice `mostrando 5000 de 12431`, respetando el filtro activo.
+4. ~~`tui/widgets/` vacío~~ → borrado.
+5. ~~Brotli sin avisar~~ → ver abajo, resultó ser mucho más grave.
+6. ~~README prometiendo PyPI y un GitHub inexistentes~~ → instalación desde
+   fuente y URLs reales.
 
-- `test_core.py` (24) — modelos, almacén, motor contra un servidor HTTP real,
-  repeater, detector.
-- `test_tui.py` (15) — TUI headless con el harness de pilotaje de Textual.
-- `test_regresiones.py` (12) — uno por cada fallo corregido en la revisión,
-  escritos primero y comprobados en rojo contra el código anterior.
+### Brotli: estaba mal clasificado
+
+Lo tenía anotado como cosmético. El daño real era que `decoded_body()` devolvía
+los bytes comprimidos, así que **el detector buscaba reflejos en basura binaria
+y devolvía lista vacía** — falso negativo silencioso, el mismo fallo ya
+corregido para gzip, y hoy el caso común porque brotli es el default de nginx,
+Cloudflare y Express.
+
+Tres respuestas: el motor recorta el `Accept-Encoding` (cero dependencias,
+funciona en Termux), el extra `[br]` descomprime de verdad, y si ni lo uno ni
+lo otro la interfaz lo dice **y avisa de que el detector tampoco pudo leer ese
+cuerpo**.
+
+### Otras
+
+- Vista combinada de petición y respuesta con `t` o con el botón, al estilo
+  Burp, con la preferencia guardada. Estrena la tabla `meta`, que llevaba en el
+  esquema sin usarse desde la primera versión.
+- `Store` acepta un `timeout`: `add_flow()` se llama desde el bucle de la
+  interfaz, y cinco segundos esperando un bloqueo son cinco de TUI congelada.
+- `count_flows()` acepta los mismos filtros que `list_flows()` y comparten un
+  único `_where()`.
+- El aviso de «truncado» medía el cuerpo comprimido: mentía con cualquier gzip.
 
 ---
 
 ## Lo que falta
 
-Del roadmap del README, en el orden en que tiene sentido hacerlo:
+El orden y su razonamiento están en `docs/direccion.md`. Resumido:
 
-- [ ] **Intruder** — cuatro modos, con grep-match sobre los resultados.
-      `Flow.source` ya reserva el valor `"intruder"`, pero no hay nada detrás.
-- [ ] **Sitemap y alcance** — árbol de rutas por host y un concepto de
-      *scope*. Hoy el proxy captura todo lo que pasa, sin filtro de alcance.
-- [ ] **Matriz de cobertura WSTG y generación de reporte** — es la razón de
-      ser del proyecto y es lo único grande que todavía no existe. El detector
-      ya etiqueta con IDs WSTG, así que la mitad de los datos está; falta la
-      matriz que diga qué pruebas se deben todavía, y el reporte que las
-      convierta en entregable.
-- [ ] **Adaptador de motor mitmproxy** — TLS, HTTP/2 y WebSockets. La
-      interfaz `Engine` ya está hecha para esto; es implementar una clase.
-- [ ] **API de plugins.**
+1. **Intruder**, cuatro modos con grep-match. Subió al primer puesto: `send_raw`
+   ya manda por socket crudo con TLS y el repeater ya envía fuera del hilo de
+   la interfaz, así que está casi construido, y no necesita scope porque no
+   dispara por su cuenta.
+2. **Sitemap y scope.** Hoy el proxy captura todo sin filtro de alcance.
+3. **Interceptar y editar en vuelo.** La brecha más grande con Burp:
+   `builtin.py::_manejar()` reenvía la petición de inmediato, así que cuando la
+   ves ya llegó al servidor. Contra un token de un solo uso, el repeater no
+   sirve: manda una *segunda* petición.
+4. **DAST con correa**, que necesita el 2.
+5. **Matriz WSTG y reporte**, la razón de ser declarada del proyecto.
+6. mitmproxy, plugins.
+
+**IA: aplazada sin fecha**, y no por razones técnicas. Ver la decisión 3 de
+`docs/direccion.md`.
 
 ---
 
-## Deuda y cabos sueltos detectados
+## Deuda conocida que sigue abierta
 
-Cosas que encontré leyendo el código hoy y que no están en el roadmap. Ninguna
-rompe nada ahora mismo, pero todas van a estorbar después:
-
-1. **`Store.set_note()` no tiene forma de llamarse desde la interfaz.**
-   Existe, está probado, y no hay ninguna tecla que agregue una nota a un
-   flujo. Camino muerto hasta que se le ponga un atajo.
-2. **`Finding` guarda `severity`, `cvss_vector`, `justification` y
-   `confirmed`, pero nada los escribe.** Están en el modelo y en el esquema
-   SQL esperando a la matriz de cobertura y al reporte. Hasta entonces, todo
-   candidato se persiste con esos cuatro campos vacíos.
-3. **`list_flows()` tiene `limite=1000` por defecto**, y `refrescar_tabla()`
-   lo usa sin pasar nada. Con más de 1000 flujos en la sesión, filtrar o
-   limpiar deja ver solo los 1000 más recientes, en silencio. Hace falta o
-   paginación o un aviso.
-4. **`tui/widgets/` es un paquete vacío.** Solo tiene el `__init__.py`.
-5. **Brotli queda sin decodificar** — no está en la stdlib, y meterlo rompería
-   la regla de cero dependencias nativas. Está documentado en el docstring de
-   `decoded_body()`, pero en la interfaz solo se avisa en el repeater, no en
-   el panel de respuesta de la pantalla principal.
-6. **El README promete cosas que todavía no existen fuera de esta máquina:**
-   `pip install luzxfer` (no está publicado en PyPI) y
-   `github.com/jdavid/luzxfer` como Homepage e Issues en el `pyproject.toml`.
-   El repo **no tiene remoto configurado ni tags**. O se publica, o esas tres
-   referencias deberían decir que el proyecto es local por ahora.
+1. **Cambiar de sesión en caliente no está implementado.** Elegir otra en el
+   selector te dice qué comando la abre. Reemplazar el `Store` vivo con el
+   motor corriendo y flujos entrando es un problema distinto del de no perder
+   el historial.
+2. **`severity`, `cvss_vector` y `justification` siguen sin escribirse.**
+   Esperan al reporte, a propósito.
+3. **La preferencia de vista es por sesión, no global.** Cuando aparezca la
+   segunda preferencia global —el límite de peticiones del DAST, o si la
+   interceptación arranca encendida— esto gradúa a `dir_datos()/config`.
+4. **`listar()` deja `-shm` y `-wal` detrás.** Leer una base WAL necesita el
+   índice de memoria compartida aunque solo se lea, y una conexión de solo
+   lectura no puede borrarlo. Basura inofensiva que limpia la siguiente
+   conexión de escritura; documentada en el docstring de `resumen()`.
+5. **No hay un `CHANGELOG.md`.** Con dos versiones y un tag ya empieza a hacer
+   falta; los mensajes de commit lo suplen por ahora.
 
 ---
 
 ## Reglas de diseño que no se negocian
 
-Antes de tocar nada, estas dos son las que sostienen todo lo demás:
-
-1. **Ninguna interfaz habla con un motor directamente.** Se habla con
-   `Engine`. Es lo que hace que mitmproxy sea una clase nueva y no una
-   reescritura.
-2. **Nada en `core/` importa de `tui/`.** Es lo que deja posible un segundo
-   front end o una corrida headless.
-
-Y dos más que vienen del propósito de la herramienta:
-
-3. **Cero dependencias nativas en el camino por defecto.** Todo stdlib excepto
-   Textual, porque el objetivo es que instale en Termux, donde no hay wheels
-   precompilados y cualquier extensión en C o Rust se compila en el teléfono.
-   Lo que necesite compilar va en un extra opcional, como `[mitm]`.
-4. **El repeater no corrige lo que escribes.** Un repeater que ordena la
-   petición no sirve para probar qué hace el servidor con la desordenada.
+Las siete están en `docs/direccion.md` con su razonamiento. En corto: nadie
+habla con un motor concreto, `core/` no importa de `tui/`, cero dependencias
+nativas en el camino por defecto, lo que escribes es lo que viaja, nada activo
+sin alcance, candidato no es hallazgo, y cada incremento deja la herramienta
+funcionando con sus tests y `ruff` limpio.
 
 ---
 
@@ -155,14 +145,13 @@ Y dos más que vienen del propósito de la herramienta:
 ```bash
 cd /home/davy/HERRAMIENTAS/luzxfer
 
-./venv/bin/python -m pytest -q          # 51 tests, ~13 s
+./venv/bin/python -m pytest -q          # 136 tests, ~34 s
 ./venv/bin/ruff check src tests         # linter
-./venv/bin/luzxfer --no-engine -d sesion.db   # revisar una sesión guardada
+./venv/bin/luzxfer --sesiones           # que hay guardado
+./venv/bin/luzxfer -s lab -u http://127.0.0.1:8099   # modo inverso
 ```
 
-Los tests **solo** corren con el python del venv: el del sistema no tiene
-textual. Las dependencias de desarrollo ya están instaladas ahí.
-
-Para probar contra un lab local hay que usar **modo inverso**
-(`-u http://127.0.0.1:8099`), porque los navegadores basados en Chromium
-nunca mandan `localhost` ni `127.0.0.1` por un proxy configurado.
+Para probar contra un lab local hay que usar **modo inverso**, porque los
+navegadores basados en Chromium nunca mandan `localhost` ni `127.0.0.1` por un
+proxy configurado. Y el motor integrado **no intercepta HTTPS**: un `CONNECT`
+contesta 501 explicando por qué.
