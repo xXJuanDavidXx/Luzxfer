@@ -248,3 +248,138 @@ async def test_repeater_envia_de_verdad_y_muestra_la_respuesta():
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# ------------------------------------------------------------- notas (n)
+async def test_la_tecla_n_guarda_una_nota_en_el_flujo():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        fid = app._flujo_actual.id
+
+        await pilot.press("n")
+        await pilot.pause()
+        app.screen.query_one("#nota-input", Input).value = "parametro q sin escapar"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert app.store.get_flow(fid).note == "parametro q sin escapar"
+
+
+async def test_esc_en_la_nota_no_guarda_nada():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        fid = app._flujo_actual.id
+        await pilot.press("n")
+        await pilot.pause()
+        app.screen.query_one("#nota-input", Input).value = "esto se descarta"
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.store.get_flow(fid).note == ""
+
+
+async def test_la_nota_se_ve_en_el_panel_de_peticion():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        await pilot.press("n")
+        await pilot.pause()
+        app.screen.query_one("#nota-input", Input).value = "revisar en el reporte"
+        await pilot.press("enter")
+        await pilot.pause()
+        panel = app.query_one("#panel-req", Static).render().plain
+        assert "revisar en el reporte" in panel
+        assert "GET /ruta?q=PRUEBA" in panel          # la peticion sigue ahi
+
+
+async def test_la_nota_se_puede_editar_y_borrar():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        fid = app._flujo_actual.id
+
+        await pilot.press("n")
+        await pilot.pause()
+        app.screen.query_one("#nota-input", Input).value = "primera"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        await pilot.press("n")                        # se reabre con lo de antes
+        await pilot.pause()
+        assert app.screen.query_one("#nota-input", Input).value == "primera"
+        app.screen.query_one("#nota-input", Input).value = ""
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.store.get_flow(fid).note == ""
+
+
+async def test_nota_sin_seleccion_avisa_y_no_abre():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("n")
+        await pilot.pause()
+        assert app.screen is app.screen_stack[0]
+
+
+# ------------------------------------------------ confirmar candidato (v)
+async def test_la_tecla_v_confirma_el_candidato_resaltado():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#detalle").active = "tab-hall"
+        await pilot.pause()
+        hall = app.query_one("#hallazgos", DataTable)
+        hall.focus()
+        hall.move_cursor(row=0)
+        await pilot.pause()
+        await pilot.press("v")
+        await pilot.pause()
+        assert any(h.confirmed for h in app.store.list_findings())
+
+
+async def test_la_tecla_v_tambien_desconfirma():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#detalle").active = "tab-hall"
+        await pilot.pause()
+        hall = app.query_one("#hallazgos", DataTable)
+        hall.focus()
+        hall.move_cursor(row=0)
+        await pilot.pause()
+        await pilot.press("v")
+        await pilot.pause()
+        await pilot.press("v")
+        await pilot.pause()
+        assert not any(h.confirmed for h in app.store.list_findings())
+
+
+async def test_lo_confirmado_se_ve_en_la_tabla_de_candidatos():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        app.query_one("#detalle").active = "tab-hall"
+        await pilot.pause()
+        hall = app.query_one("#hallazgos", DataTable)
+        hall.focus()
+        hall.move_cursor(row=0)
+        await pilot.press("v")
+        await pilot.pause()
+        assert "✓" in str(hall.get_row_at(0)[0])

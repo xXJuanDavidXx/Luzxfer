@@ -314,3 +314,31 @@ def test_detector_no_analiza_flujo_sin_respuesta():
     f = Flow(request=Request(method="GET", url="http://ej.com/",
                              headers=[("Host", "ej.com")]), response=None)
     assert detector.analizar(f) == []
+
+
+def test_store_confirma_un_hallazgo_y_filtra_por_eso():
+    st = Store()
+    hid = st.add_finding(Finding(kind="REFLEJO", detail="q se refleja",
+                                 url="http://ej.com/b", wstg=["WSTG-INPV-01"]))
+    st.add_finding(Finding(kind="FUGA", detail="server: nginx", url="ej.com"))
+    assert [h.confirmed for h in st.list_findings() if h.id == hid] == [False]
+
+    st.set_confirmed(hid, True)
+    assert [h.id for h in st.list_findings(solo_confirmados=True)] == [hid]
+    assert len(st.list_findings()) == 2            # el filtro no es el default
+    st.set_confirmed(hid, False)
+    assert st.list_findings(solo_confirmados=True) == []
+    st.close()
+
+
+def test_confirmar_sobrevive_al_reinicio(tmp_path):
+    """La columna existia en el esquema desde la primera version y nada la
+    escribia nunca: este es el primer ida y vuelta real."""
+    ruta = tmp_path / "s.db"
+    st = Store(ruta)
+    hid = st.add_finding(Finding(kind="REFLEJO", detail="q", url="http://ej.com/b"))
+    st.set_confirmed(hid, True)
+    st.close()
+    otra = Store(ruta)
+    assert [h.confirmed for h in otra.list_findings() if h.id == hid] == [True]
+    otra.close()

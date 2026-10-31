@@ -250,12 +250,26 @@ class Store:
             hallazgo.id = int(cur.lastrowid)
             return hallazgo.id
 
-    def list_findings(self, *, kind: str = "") -> list[Finding]:
-        sql = "SELECT * FROM findings"
+    def set_confirmed(self, hid: int, confirmado: bool) -> None:
+        """Marca un candidato como hallazgo validado a mano, o lo desmarca.
+
+        Es la frontera que el README promete: lo que el detector senala es
+        un candidato, y solo un humano lo convierte en hallazgo.
+        """
+        with self._lock:
+            self._con.execute("UPDATE findings SET confirmed=? WHERE id=?",
+                              (int(confirmado), hid))
+            self._con.commit()
+
+    def list_findings(self, *, kind: str = "",
+                      solo_confirmados: bool = False) -> list[Finding]:
+        sql = "SELECT * FROM findings WHERE 1=1"
         args: list[object] = []
         if kind:
-            sql += " WHERE kind = ?"
+            sql += " AND kind = ?"
             args.append(kind)
+        if solo_confirmados:
+            sql += " AND confirmed = 1"
         sql += " ORDER BY id DESC"
         with self._lock:
             filas = self._con.execute(sql, args).fetchall()

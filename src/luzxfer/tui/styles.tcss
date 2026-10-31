@@ -247,3 +247,22 @@ Button.-primary:hover {
     height: 1;
     margin-top: 1;
 }
+
+/* nota del flujo: caja chica, solo una linea de entrada */
+#nota-caja {
+    width: 70%;
+    height: auto;
+    background: #0e1016;
+    border: round #f0a93b;
+    padding: 1 2;
+}
+
+#nota-titulo {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#nota-ayuda {
+    height: 1;
+    margin-top: 1;
+}

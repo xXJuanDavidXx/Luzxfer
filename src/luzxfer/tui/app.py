@@ -21,6 +21,7 @@ from ..core.engine import Builtin, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import detector
+from .screens.nota import NotaScreen
 from .screens.repeater import RepeaterScreen
 from .screens.sesiones import SesionesScreen
 
@@ -67,6 +68,8 @@ class LuzxferApp(App):
         Binding("s", "sesiones", "sesiones"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
+        Binding("n", "nota", "nota"),
+        Binding("v", "confirmar", "confirmar"),
         Binding("c", "limpiar", "limpiar"),
         Binding("g", "arriba", "inicio", show=False),
         Binding("G", "abajo", "final", show=False),
@@ -132,6 +135,7 @@ class LuzxferApp(App):
         tabla.focus()
 
         hall = self.query_one("#hallazgos", DataTable)
+        self._col_ok = hall.add_column("ok", width=3)
         hall.add_column("tipo", width=10)
         hall.add_column("detalle")
         hall.add_column("wstg", width=26)
@@ -214,12 +218,20 @@ class LuzxferApp(App):
     COLOR_HALLAZGO = {"REFLEJO": "#e05c5c", "COOKIE": "#f0a93b",
                       "CABECERA": "#5fa8d3", "FUGA": "#7b8496", "ERROR": "#c99bf0"}
 
+    @staticmethod
+    def _marca_ok(confirmado: bool) -> Text:
+        return Text("✓" if confirmado else "", style="bold #6fcf8f")
+
     def _agregar_hallazgo(self, hall: DataTable, h) -> None:
         hall.add_row(
+            self._marca_ok(h.confirmed),
             Text(h.kind, style=f"bold {self.COLOR_HALLAZGO.get(h.kind, '#d9dde5')}"),
             Text(h.detail, style="#d9dde5"),
             Text(", ".join(h.wstg), style="#6fcf8f"),
             Text(h.url, style="#7b8496"),
+            # la clave es el id del hallazgo: sin ella no hay forma de saber
+            # cual se esta confirmando
+            key=str(h.id) if h.id is not None else None,
         )
 
     # ------------------------------------------------------------------
@@ -283,8 +295,11 @@ class LuzxferApp(App):
             self._pintar_detalle(flujo)
 
     def _pintar_detalle(self, f: Flow) -> None:
-        self.query_one("#panel-req", Static).update(
-            Text(f.request.raw(), style="#c7cdd9"))
+        partes_req = []
+        if f.note:
+            partes_req.append((f"✎ {f.note}\n\n", "#f0a93b"))
+        partes_req.append((f.request.raw(), "#c7cdd9"))
+        self.query_one("#panel-req", Static).update(Text.assemble(*partes_req))
 
         if f.error:
             self.query_one("#panel-resp", Static).update(
@@ -355,6 +370,43 @@ class LuzxferApp(App):
             return
         self.notify(f"luzxfer -s {nombre}", title="para abrir esa sesion",
                     timeout=10)
+
+    def action_nota(self) -> None:
+        if self._flujo_actual is None or self._flujo_actual.id is None:
+            self.notify("selecciona un flujo primero", severity="warning")
+            return
+        self.push_screen(NotaScreen(self._flujo_actual.note), self._guardar_nota)
+
+    def _guardar_nota(self, nota: str | None) -> None:
+        f = self._flujo_actual
+        if nota is None or f is None or f.id is None:
+            return                              # se cerro con esc: no se toca
+        f.note = nota
+        self.store.set_note(f.id, nota)
+        self._pintar_detalle(f)
+
+    def action_confirmar(self) -> None:
+        """Convierte un candidato en hallazgo validado, o lo devuelve.
+
+        Solo esto despierta la columna `confirmed`. La severidad, el vector
+        CVSS y la justificacion siguen esperando al reporte a proposito:
+        inventarles interfaz ahora seria construir contra un formato de
+        entregable que todavia no esta decidido.
+        """
+        hall = self.query_one("#hallazgos", DataTable)
+        if not hall.row_count:
+            return
+        try:
+            clave = hall.coordinate_to_cell_key((hall.cursor_row, 0)).row_key
+            hid = int(clave.value)
+        except (TypeError, ValueError, AttributeError):
+            return
+        actual = next((h for h in self.store.list_findings() if h.id == hid), None)
+        if actual is None:
+            return
+        nuevo = not actual.confirmed
+        self.store.set_confirmed(hid, nuevo)
+        hall.update_cell(clave.value, self._col_ok, self._marca_ok(nuevo))
 
     def action_marcar(self) -> None:
         if self._flujo_actual is None or self._flujo_actual.id is None:
