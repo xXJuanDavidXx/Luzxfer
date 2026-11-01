@@ -18,6 +18,7 @@ from textual.widgets import Button, Static, TabbedContent, TabPane, TextArea
 from ...core.models import Flow
 from ...core.tools import cuerpo as fmt
 from ...core.tools import repeater
+from ..paleta import P
 
 MAX_SALTOS = 5
 
@@ -87,11 +88,11 @@ class RepeaterScreen(ModalScreen):
                   if self.seguir else "sin seguir redirecciones")
         self.query_one("#rep-titulo", Static).update(
             Text.assemble(
-                ("repeater", "bold #f0a93b"),
-                (f"  ·  {n} pestaña{'' if n == 1 else 's'}", "#7b8496"),
-                (f"  ·  {saltos}", "#5fa8d3" if self.seguir else "#5c6578"),
+                ("repeater", f"bold {P.acento}"),
+                (f"  ·  {n} pestaña{'' if n == 1 else 's'}", P.secundario),
+                (f"  ·  {saltos}", P.info if self.seguir else P.tenue),
                 ("   ctrl+s enviar · ctrl+w cerrar pestaña · "
-                 "ctrl+r redirecciones · esc cerrar", "#5c6578"),
+                 "ctrl+r redirecciones · esc cerrar", P.tenue),
             )
         )
 
@@ -142,12 +143,12 @@ class RepeaterScreen(ModalScreen):
         try:
             repeater.parse_raw(crudo)       # validar antes de lanzar el hilo
         except repeater.ErrorPeticion as e:
-            salida.update(Text(f"peticion invalida\n\n{e}", style="#e05c5c"))
+            salida.update(Text(f"peticion invalida\n\n{e}", style=P.peligro))
             return
         # lo editado se guarda al enviar: si cierras despues, sigue ahi
         self.store.set_repeticion(rid, crudo)
         self._enviando.add(rid)
-        salida.update(Text("enviando…", style="italic #f0a93b"))
+        salida.update(Text("enviando…", style=f"italic {P.acento}"))
         self._enviar_en_hilo(rid, crudo)
 
     @work(thread=True, exclusive=False)
@@ -171,7 +172,7 @@ class RepeaterScreen(ModalScreen):
         self._enviando.discard(rid)
         try:
             self.query_one(f"#out-{rid}", Static).update(
-                Text(texto, style="#e05c5c"))
+                Text(texto, style=P.peligro))
         except Exception:
             pass                        # la pestaña se cerro mientras tanto
 
@@ -188,26 +189,26 @@ class RepeaterScreen(ModalScreen):
             self.app._ingresar(flujo)
 
         if flujo.error:
-            salida.update(Text(f"error de red\n\n{flujo.error}", style="#e05c5c"))
+            salida.update(Text(f"error de red\n\n{flujo.error}", style=P.peligro))
             return
 
         r = flujo.response
-        color = {2: "#6fcf8f", 3: "#5fa8d3", 4: "#f0a93b", 5: "#e05c5c"}.get(
-            r.status // 100, "#d9dde5")
+        color = {2: P.bien, 3: P.info, 4: P.acento, 5: P.peligro}.get(
+            r.status // 100, P.texto)
         texto, nota = fmt.presentar(r.decoded_body(), r.content_type,
                                     bonito=getattr(self.app, "cuerpo_bonito", True))
         enc = f"  ({r.encoding} sin decodificar)" if r.sin_decodificar() else ""
         partes = [
             (f"{r.status} {r.reason}", f"bold {color}"),
-            (f"   {flujo.duration_ms}ms   {len(r.body)} bytes{enc}\n", "#7b8496"),
+            (f"   {flujo.duration_ms}ms   {len(r.body)} bytes{enc}\n", P.secundario),
         ]
         if flujo.saltos:
             # por donde paso importa tanto como donde acabo
-            partes.append((f"paso por: {' → '.join(flujo.saltos)}\n", "#5fa8d3"))
-        partes.append(("\n" + r.raw_headers() + "\n\n", "#7b8496"))
+            partes.append((f"paso por: {' → '.join(flujo.saltos)}\n", P.info))
+        partes.append(("\n" + r.raw_headers() + "\n\n", P.secundario))
         if nota:
-            partes.append((f"— {nota}\n\n", "#5fa8d3"))
-        partes.append((texto, "#c7cdd9"))
+            partes.append((f"— {nota}\n\n", P.info))
+        partes.append((texto, P.cuerpo))
         salida.update(Text.assemble(*partes))
 
     def on_button_pressed(self, ev: Button.Pressed) -> None:

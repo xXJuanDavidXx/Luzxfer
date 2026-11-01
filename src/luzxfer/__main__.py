@@ -72,6 +72,10 @@ def main(argv: list[str] | None = None) -> int:
                          "defecto se quitan, porque con ellos el servidor "
                          "contesta 304 sin cuerpo y no hay nada que analizar. "
                          "Conservalos para probar envenenamiento de cache")
+    ap.add_argument("--tema", choices=("oscuro", "claro", "contraste"),
+                    default=None,
+                    help="tema de color, por encima de lo que diga "
+                         "~/.config/luzxfer/config.ini")
     ap.add_argument("--sin-plugins", action="store_true",
                     help="no cargar los plugins de "
                          "~/.local/share/luzxfer/plugins/. Un plugin es "
@@ -118,6 +122,12 @@ def main(argv: list[str] | None = None) -> int:
               "  Esta herramienta reenvia peticiones arbitrarias: exponerla en una\n"
               "  red es regalar un proxy abierto. Usa un tunel SSH si necesitas\n"
               "  llegar desde otro equipo.\n", file=sys.stderr)
+
+    from .tui import paleta
+    for aviso in paleta.cargar():
+        print(f"luzxfer: {aviso}", file=sys.stderr)
+    if a.tema:
+        paleta.ACTUAL = paleta.TEMAS[a.tema]
 
     from .tui.app import LuzxferApp
 

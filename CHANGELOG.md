@@ -67,6 +67,12 @@ experiencia de quien ya usaba la herramienta.
   reventaba al salir de la herramienta.
 
 ### Añadido
+- **Temas y color** (`--tema claro|oscuro|contraste`, o
+  `~/.config/luzxfer/config.ini`). Los 166 colores que estaban a pelo
+  repartidos por nueve archivos son ahora una paleta con nombres
+  semánticos, y la hoja de estilos los recibe como variables.
+  - Tema `contraste` pensado para accesibilidad, no como adorno.
+  - Un color mal escrito avisa y se ignora; el resto se aplica.
 - **Pestañas en el repeater**, y persisten con la sesión: cierras, sigues
   navegando, vuelves y tu petición afinada sigue ahí. `ctrl+w` cierra una.
 - **Seguir redirecciones en el repeater** (`ctrl+r`), hasta cinco y

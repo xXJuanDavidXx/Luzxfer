@@ -12,6 +12,8 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 
+from ..paleta import P
+
 
 class NotaScreen(ModalScreen[str | None]):
     """Devuelve el texto escrito, o None si se cerro sin guardar."""
@@ -24,14 +26,14 @@ class NotaScreen(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="nota-caja"):
-            yield Static(Text("nota del flujo", style="bold #f0a93b"),
+            yield Static(Text("nota del flujo", style=f"bold {P.acento}"),
                          id="nota-titulo")
             # se precarga la nota: abrir para editar y encontrarla vacia
             # seria perder lo escrito antes
             yield Input(value=self.nota_actual,
                         placeholder="que viste en este flujo…",
                         id="nota-input")
-            yield Static(Text("enter guardar · esc descartar", style="#5c6578"),
+            yield Static(Text("enter guardar · esc descartar", style=P.tenue),
                          id="nota-ayuda")
 
     def on_mount(self) -> None:

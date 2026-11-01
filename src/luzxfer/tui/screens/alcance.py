@@ -15,6 +15,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Static, TextArea
 
 from ...core.tools import alcance as alc
+from ..paleta import P
 
 AYUDA = """\
 +objetivo.com          incluir ese host, cualquier puerto
@@ -44,14 +45,14 @@ class AlcanceScreen(ModalScreen):
         with Vertical(id="alc-caja"):
             yield Static(
                 Text.assemble(
-                    ("alcance", "bold #f0a93b"),
+                    ("alcance", f"bold {P.acento}"),
                     ("   ctrl+s guardar · ctrl+f filtrar historial · esc descartar",
-                     "#5c6578"),
+                     P.tenue),
                 ),
                 id="alc-titulo",
             )
             yield TextArea(self.texto_inicial, id="alc-editor", soft_wrap=False)
-            yield Static(Text(AYUDA, style="#5c6578"), id="alc-ayuda")
+            yield Static(Text(AYUDA, style=P.tenue), id="alc-ayuda")
             yield Static("", id="alc-aviso")
 
     def on_mount(self) -> None:
@@ -59,12 +60,12 @@ class AlcanceScreen(ModalScreen):
         self._pintar_estado()
 
     # ------------------------------------------------------------------
-    def _pintar_estado(self, extra: str = "", color: str = "#5fa8d3") -> None:
+    def _pintar_estado(self, extra: str = "", color: str = P.info) -> None:
         marca = "si" if self.solo_alcance else "no"
         base = f"filtrar el historial por alcance: {marca}"
         texto = f"{extra}\n{base}" if extra else base
         self.query_one("#alc-aviso", Static).update(
-            Text(texto, style=color if extra else "#5fa8d3"))
+            Text(texto, style=color if extra else P.info))
 
     def action_filtrar(self) -> None:
         """Se aplica al momento, sin esperar a guardar.
@@ -86,7 +87,7 @@ class AlcanceScreen(ModalScreen):
         if errores:
             # no se cierra: las reglas buenas ya se aplicaron, pero hay
             # algo escrito que no significa nada y cerrar lo escondería
-            self._pintar_estado("\n".join(errores), "#e05c5c")
+            self._pintar_estado("\n".join(errores), P.peligro)
             return
         self.dismiss()
 

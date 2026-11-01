@@ -467,6 +467,39 @@ brotli de verdad. Y si aun así llega un cuerpo en algo ilegible, el panel de
 respuesta lo dice y avisa de que el detector tampoco pudo leerlo, en vez de
 mostrarte binario y callarse.
 
+## Temas y color
+
+```bash
+luzxfer --tema claro        # oscuro (por defecto) · claro · contraste
+```
+
+O de forma permanente en `~/.config/luzxfer/config.ini`:
+
+```ini
+[tema]
+nombre = claro
+
+[colores]
+peligro = #cc0000       # cualquier color suelto, por encima del tema
+```
+
+Los nombres de color son **semánticos, no de color**: `peligro` sigue
+significando peligro aunque en otro tema no sea el mismo rojo. `rojo`
+dejaría de significar nada el día que alguien ponga un tema donde el
+peligro sea naranja. Son `texto`, `cuerpo`, `atenuado`, `secundario`,
+`tenue`, `separador`, `acento`, `acento_suave`, `bien`, `info`,
+`peligro`, `especial`, `claro`, y las superficies `fondo`, `panel`,
+`modal`, `elevado`, `superficie`, `borde`.
+
+El tema `contraste` existe para quien lo necesita de verdad, no como
+adorno: los grises intermedios se colapsan —seis niveles de gris no
+sirven de nada si no se distinguen— y el verde y el rojo se separan todo
+lo posible.
+
+Un color mal escrito **avisa y se ignora**; el resto del archivo se
+aplica igual. Un dedazo en un archivo de texto no es razón para no poder
+arrancar una herramienta de trabajo.
+
 ## Plugins
 
 Un plugin es un `.py` en `~/.local/share/luzxfer/plugins/` que define
@@ -557,7 +590,8 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] Matriz de cobertura WSTG y generación de informes
 - [x] Adaptador de motor mitmproxy
 - [x] API de plugins
-- [ ] Personalización: temas, colores, atajos configurables
+- [x] Personalización: temas y colores
+- [ ] Personalización: atajos de teclado configurables
 
 `docs/direccion.md` tiene el razonamiento detrás de ese orden, y por qué la
 IA está aplazada en vez de planificada.

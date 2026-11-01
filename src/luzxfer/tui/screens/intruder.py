@@ -20,6 +20,7 @@ from textual.widgets import Button, DataTable, Input, Select, Static, TextArea
 
 from ...core.models import Flow
 from ...core.tools import intruder, repeater
+from ..paleta import P
 
 AVISO_GRANDE = 1000
 
@@ -48,10 +49,10 @@ class IntruderScreen(ModalScreen):
         with Vertical(id="int-caja"):
             yield Static(
                 Text.assemble(
-                    ("intruder", "bold #f0a93b"),
-                    (f"  ·  flujo {self.flujo.id}", "#7b8496"),
+                    ("intruder", f"bold {P.acento}"),
+                    (f"  ·  flujo {self.flujo.id}", P.secundario),
                     ("   ctrl+m marcar · ctrl+l lanzar · ctrl+x abortar · esc cerrar",
-                     "#5c6578"),
+                     P.tenue),
                 ),
                 id="int-titulo",
             )
@@ -146,16 +147,16 @@ class IntruderScreen(ModalScreen):
         try:
             a = self._preparar()
         except intruder.ErrorAtaque as e:
-            self._estado(str(e), "#7b8496")
+            self._estado(str(e), P.secundario)
             return
         aviso = ""
         if a.avisos:
             aviso = (f"   ⚠ {len(a.avisos)} payload(s) no sobreviven a latin-1 "
                      f"y viajarian mutados")
         self._estado(f"{a.total} peticion(es){aviso}",
-                     "#f0a93b" if a.avisos else "#a8b0c0")
+                     P.acento if a.avisos else P.atenuado)
 
-    def _estado(self, texto: str, color: str = "#a8b0c0") -> None:
+    def _estado(self, texto: str, color: str = P.atenuado) -> None:
         self.query_one("#int-estado", Static).update(Text(texto, style=color))
 
     def on_text_area_changed(self, ev: TextArea.Changed) -> None:
@@ -173,7 +174,7 @@ class IntruderScreen(ModalScreen):
         try:
             ed.text = intruder.marcar(ed.text, inicio, fin)
         except intruder.ErrorAtaque as e:
-            self._estado(str(e), "#e05c5c")
+            self._estado(str(e), P.peligro)
 
     def action_marcar(self) -> None:
         """Envuelve la seleccion en marcadores, o la palabra del cursor.
@@ -191,7 +192,7 @@ class IntruderScreen(ModalScreen):
         if inicio == fin:
             inicio, fin = self._palabra_en(ed.text, inicio)
         if inicio == fin:
-            self._estado("no hay nada que marcar bajo el cursor", "#7b8496")
+            self._estado("no hay nada que marcar bajo el cursor", P.secundario)
             return
         self._marcar_rango(inicio, fin)
 
@@ -215,19 +216,19 @@ class IntruderScreen(ModalScreen):
     # ------------------------------------------------------------ lanzar
     def action_lanzar(self) -> None:
         if self.ataque is not None and not self.ataque.terminado:
-            self._estado("ya hay un ataque corriendo", "#f0a93b")
+            self._estado("ya hay un ataque corriendo", P.acento)
             return
         try:
             a = self._preparar()
         except intruder.ErrorAtaque as e:
-            self._estado(str(e), "#e05c5c")
+            self._estado(str(e), P.peligro)
             return
 
         # ultima barrera antes de mandar peticiones a un sistema ajeno
         if a.total > AVISO_GRANDE and not self._confirmado:
             self._confirmado = True
             self._estado(f"son {a.total} peticiones. ctrl+l otra vez para "
-                         f"confirmar", "#e05c5c")
+                         f"confirmar", P.peligro)
             return
 
         self.ataque = a
@@ -236,7 +237,7 @@ class IntruderScreen(ModalScreen):
         self._ataque_id = self.app.store.add_ataque(
             a.cfg.modo.value, self._etiqueta_destino(),
             self.query_one("#int-editor", TextArea).text, a.total)
-        self._estado(f"lanzando… 0/{a.total}", "#f0a93b")
+        self._estado(f"lanzando… 0/{a.total}", P.acento)
         self._correr(a)
 
     @work(thread=True, exclusive=True)
@@ -252,7 +253,7 @@ class IntruderScreen(ModalScreen):
         self._fila(r)
         if self.ataque is not None:
             self._estado(f"lanzando… {self.ataque.enviadas}/{self.ataque.total}",
-                         "#f0a93b")
+                         P.acento)
 
     def _fin(self, a: intruder.Ataque) -> None:
         if self._ataque_id is not None:
@@ -260,13 +261,13 @@ class IntruderScreen(ModalScreen):
         self._estado(
             f"{'abortado' if a.abortado else 'terminado'}: "
             f"{a.enviadas} de {a.total}   ·   ctrl+o ordena por largo",
-            "#e05c5c" if a.abortado else "#6fcf8f")
+            P.peligro if a.abortado else P.bien)
 
     def action_abortar(self) -> None:
         if self.ataque is not None and not self.ataque.terminado:
             self.ataque.abortar()
             self._estado("abortando: se esperan las peticiones en vuelo",
-                         "#f0a93b")
+                         P.acento)
 
     def action_cerrar(self) -> None:
         self.action_abortar()      # no dejar un ataque suelto al cerrar
@@ -279,21 +280,21 @@ class IntruderScreen(ModalScreen):
             self.action_abortar()
 
     # --------------------------------------------------------- resultados
-    COLOR_COD = {2: "#6fcf8f", 3: "#5fa8d3", 4: "#f0a93b", 5: "#e05c5c"}
+    COLOR_COD = {2: P.bien, 3: P.info, 4: P.acento, 5: P.peligro}
 
     def _fila(self, r: intruder.Resultado) -> None:
         tabla = self.query_one("#int-resultados", DataTable)
-        cod = (Text("ERR", style="#e05c5c") if r.status is None
+        cod = (Text("ERR", style=P.peligro) if r.status is None
                else Text(str(r.status),
-                         style=f"bold {self.COLOR_COD.get(r.status // 100, '#d9dde5')}"))
+                         style=f"bold {self.COLOR_COD.get(r.status // 100, '{P.texto}')}"))
         tabla.add_row(
-            Text(str(r.n), style="#7b8496"),
-            Text(" / ".join(r.payloads)[:30], style="#d9dde5"),
+            Text(str(r.n), style=P.secundario),
+            Text(" / ".join(r.payloads)[:30], style=P.texto),
             cod,
-            Text(str(r.largo), style="#a8b0c0"),
-            Text(str(r.ms), style="#7b8496"),
+            Text(str(r.largo), style=P.atenuado),
+            Text(str(r.ms), style=P.secundario),
             Text(", ".join(r.grep) if r.grep else (r.error[:40] if r.error else ""),
-                 style="#6fcf8f" if r.grep else "#e05c5c"),
+                 style=P.bien if r.grep else P.peligro),
             key=str(r.n),
         )
 

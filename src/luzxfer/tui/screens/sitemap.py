@@ -17,28 +17,29 @@ from textual.screen import ModalScreen
 from textual.widgets import Static, Tree
 
 from ...core.tools import sitemap
+from ..paleta import P
 
-COLOR_ESTADO = {2: "#6fcf8f", 3: "#5fa8d3", 4: "#f0a93b", 5: "#e05c5c"}
+COLOR_ESTADO = {2: P.bien, 3: P.info, 4: P.acento, 5: P.peligro}
 
 
 def _etiqueta(n: sitemap.Nodo) -> Text:
     """Lo que se lee de un nodo de un vistazo."""
     t = Text()
-    t.append(n.nombre, style="#d9dde5" if n.visitado else "#7b8496")
+    t.append(n.nombre, style=P.texto if n.visitado else P.secundario)
 
     if not n.visitado:
         # un tramo que existe solo porque algo mas abajo se pidio. Es la
         # pista mas barata que da el mapa: nadie ha tocado /api, y a lo
         # mejor contesta algo
-        t.append("  no pedido", style="italic #5c6578")
+        t.append("  no pedido", style=f"italic {P.tenue}")
     else:
         for codigo in sorted(n.estados):
             t.append(f"  {codigo}",
-                     style=f"bold {COLOR_ESTADO.get(codigo // 100, '#d9dde5')}")
+                     style=f"bold {COLOR_ESTADO.get(codigo // 100, '{P.texto}')}")
         if not n.estados:
-            t.append("  ERR", style="#e05c5c")
+            t.append("  ERR", style=P.peligro)
         if len(n.metodos) > 1 or n.metodos - {"GET"}:
-            t.append(f"  {'/'.join(sorted(n.metodos))}", style="#a8b0c0")
+            t.append(f"  {'/'.join(sorted(n.metodos))}", style=P.atenuado)
 
     # El contador significa cosas distintas segun la fila, asi que se
     # elige uno solo y se dice cual. En un nodo visitado, cuantas veces
@@ -48,7 +49,7 @@ def _etiqueta(n: sitemap.Nodo) -> Text:
     # cuanto dice si vale la pena desplegarlo.
     cuenta = n.pedido if n.visitado else n.total
     if cuenta > 1:
-        t.append(f"  ×{cuenta}", style="#5c6578")
+        t.append(f"  ×{cuenta}", style=P.tenue)
     return t
 
 
@@ -68,10 +69,10 @@ class SitemapScreen(ModalScreen):
         with Vertical(id="mapa-caja"):
             yield Static(
                 Text.assemble(
-                    ("mapa del sitio", "bold #f0a93b"),
+                    ("mapa del sitio", f"bold {P.acento}"),
                     (f"   {rutas} rutas distintas de {peticiones} peticiones",
-                     "#a8b0c0"),
-                    ("   enter va al flujo · esc cierra", "#5c6578"),
+                     P.atenuado),
+                    ("   enter va al flujo · esc cierra", P.tenue),
                 ),
                 id="mapa-titulo",
             )
@@ -82,8 +83,8 @@ class SitemapScreen(ModalScreen):
         arbol.show_root = False
         for host in self.raiz:
             rama = arbol.root.add(
-                Text.assemble((host.nombre, "bold #d9dde5"),
-                              (f"  ×{host.total}", "#5c6578")),
+                Text.assemble((host.nombre, f"bold {P.texto}"),
+                              (f"  ×{host.total}", P.tenue)),
                 data=host, expand=True)
             self._colgar(rama, host)
         arbol.focus()

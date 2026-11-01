@@ -27,6 +27,8 @@ from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import alcance as alc
 from ..core.tools import cuerpo, dast, detector, intercepta, sitemap
+from . import paleta
+from .paleta import P
 from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.cobertura import CoberturaScreen
 from .screens.intercepta import InterceptaScreen
@@ -42,21 +44,21 @@ from .screens.sitemap import SitemapScreen
 # cuesta, y cuando recorta se dice en la barra de estado.
 LIMITE_TABLA = 5000
 
-COLOR_ESTADO = {2: "#6fcf8f", 3: "#5fa8d3", 4: "#f0a93b", 5: "#e05c5c"}
+COLOR_ESTADO = {2: P.bien, 3: P.info, 4: P.acento, 5: P.peligro}
 COLOR_METODO = {
-    "GET": "#5fa8d3", "POST": "#f0a93b", "PUT": "#c99bf0",
-    "DELETE": "#e05c5c", "PATCH": "#9bd4f0",
+    "GET": P.info, "POST": P.acento, "PUT": P.especial,
+    "DELETE": P.peligro, "PATCH": P.claro,
 }
 
 
 def pinta_estado(status: int | None, error: str = "") -> Text:
     if status is None:
-        return Text("ERR" if error else "—", style="#e05c5c" if error else "#5c6578")
-    return Text(str(status), style=f"bold {COLOR_ESTADO.get(status // 100, '#d9dde5')}")
+        return Text("ERR" if error else "—", style=P.peligro if error else P.tenue)
+    return Text(str(status), style=f"bold {COLOR_ESTADO.get(status // 100, '{P.texto}')}")
 
 
 def pinta_metodo(metodo: str) -> Text:
-    return Text(metodo, style=f"bold {COLOR_METODO.get(metodo, '#a8b0c0')}")
+    return Text(metodo, style=f"bold {COLOR_METODO.get(metodo, '{P.atenuado}')}")
 
 
 def tamano_legible(n: int) -> str:
@@ -71,6 +73,17 @@ class LuzxferApp(App):
     """Proxy de interceptacion y banco de trabajo, en la terminal."""
 
     CSS_PATH = Path(__file__).parent / "styles.tcss"
+
+    def get_css_variables(self) -> dict[str, str]:
+        """Expone la paleta a la hoja de estilos como $lx-nombre.
+
+        Sin esto el tema cambiaria los colores del codigo pero no los de
+        la hoja, y quedaria un claro con el fondo negro: peor que no
+        tener temas."""
+        from dataclasses import fields
+        propias = {f"lx-{f.name}": getattr(P, f.name)
+                   for f in fields(paleta.Paleta)}
+        return {**super().get_css_variables(), **propias}
     TITLE = "luzxfer"
 
     BINDINGS = [
@@ -212,7 +225,7 @@ class LuzxferApp(App):
         self.actualizar_estado()
 
     def _mostrar_vacio(self) -> None:
-        vacio = Text("Selecciona un flujo de la tabla.", style="italic #5c6578")
+        vacio = Text("Selecciona un flujo de la tabla.", style=f"italic {P.tenue}")
         for wid in ("#panel-req", "#panel-resp", "#ambos-req", "#ambos-resp"):
             self.query_one(wid, Static).update(vacio)
 
@@ -394,30 +407,30 @@ class LuzxferApp(App):
     def _agregar_fila(tabla: DataTable, f: Flow) -> None:
         tabla.add_row(
             Text(f"{'●' if f.marked else ''}{f.id}",
-                 style="#f0a93b" if f.marked else "#7b8496"),
+                 style=P.acento if f.marked else P.secundario),
             pinta_metodo(f.request.method),
             pinta_estado(f.status, f.error),
-            Text(f.request.host or "—", style="#a8b0c0"),
-            Text(f.request.path, style="#d9dde5"),
-            Text(tamano_legible(f.size), style="#7b8496"),
-            Text(str(f.duration_ms), style="#7b8496"),
+            Text(f.request.host or "—", style=P.atenuado),
+            Text(f.request.path, style=P.texto),
+            Text(tamano_legible(f.size), style=P.secundario),
+            Text(str(f.duration_ms), style=P.secundario),
             key=str(f.id),
         )
 
-    COLOR_HALLAZGO = {"REFLEJO": "#e05c5c", "COOKIE": "#f0a93b",
-                      "CABECERA": "#5fa8d3", "FUGA": "#7b8496", "ERROR": "#c99bf0"}
+    COLOR_HALLAZGO = {"REFLEJO": P.peligro, "COOKIE": P.acento,
+                      "CABECERA": P.info, "FUGA": P.secundario, "ERROR": P.especial}
 
     @staticmethod
     def _marca_ok(confirmado: bool) -> Text:
-        return Text("✓" if confirmado else "", style="bold #6fcf8f")
+        return Text("✓" if confirmado else "", style=f"bold {P.bien}")
 
     def _agregar_hallazgo(self, hall: DataTable, h) -> None:
         hall.add_row(
             self._marca_ok(h.confirmed),
-            Text(h.kind, style=f"bold {self.COLOR_HALLAZGO.get(h.kind, '#d9dde5')}"),
-            Text(h.detail, style="#d9dde5"),
-            Text(", ".join(h.wstg), style="#6fcf8f"),
-            Text(h.url, style="#7b8496"),
+            Text(h.kind, style=f"bold {self.COLOR_HALLAZGO.get(h.kind, '{P.texto}')}"),
+            Text(h.detail, style=P.texto),
+            Text(", ".join(h.wstg), style=P.bien),
+            Text(h.url, style=P.secundario),
             # la clave es el id del hallazgo: sin ella no hay forma de saber
             # cual se esta confirmando
             key=str(h.id) if h.id is not None else None,
@@ -457,8 +470,8 @@ class LuzxferApp(App):
         n = self.store.count_flows()
         c = self.store.count_findings()
         piezas = [
-            (f"{n} flujo{'' if n == 1 else 's'}", "#d9dde5"), ("  ·  ", "#39404f"),
-            (f"{c} candidato{'' if c == 1 else 's'}", "#f0a93b"), ("  ·  ", "#39404f"),
+            (f"{n} flujo{'' if n == 1 else 's'}", P.texto), ("  ·  ", P.separador),
+            (f"{c} candidato{'' if c == 1 else 's'}", P.acento), ("  ·  ", P.separador),
         ]
 
         # si la tabla no alcanza a mostrar todo lo que hay, decirlo. Callarlo
@@ -469,32 +482,32 @@ class LuzxferApp(App):
         # no quepa y que este fuera de alcance no son lo mismo, y un solo
         # mensaje para ambos haria pensar en el que no es
         if self.solo_alcance:
-            piezas += [(f"solo alcance: {mostrados} de {total}", "#5fa8d3"),
-                       ("  ·  ", "#39404f")]
+            piezas += [(f"solo alcance: {mostrados} de {total}", P.info),
+                       ("  ·  ", P.separador)]
         elif mostrados < total:
-            piezas += [(f"mostrando {mostrados} de {total}", "#e05c5c"),
-                       ("  ·  ", "#39404f")]
+            piezas += [(f"mostrando {mostrados} de {total}", P.peligro),
+                       ("  ·  ", P.separador)]
 
         if self._escaneo is not None and not self._escaneo.terminado:
             piezas += [(f"barriendo {self._escaneo.enviadas}/"
-                        f"{self._escaneo.total}", "#f0a93b"),
-                       ("  ·  ", "#39404f")]
+                        f"{self._escaneo.total}", P.acento),
+                       ("  ·  ", P.separador)]
         if self.plugins.cargados:
             n = len(self.plugins.cargados)
             rotos = len(self.plugins.fallos)
             etiqueta = f"{n} plugin{'' if n == 1 else 's'}"
             if rotos:
                 etiqueta += f" ({rotos} con fallos)"
-            piezas += [(etiqueta, "#e05c5c" if rotos else "#c99bf0"),
-                       ("  ·  ", "#39404f")]
+            piezas += [(etiqueta, P.peligro if rotos else P.especial),
+                       ("  ·  ", P.separador)]
         if self.interceptor.activa:
             # tiene que verse: olvidarse de que esta encendida es
             # quedarse mirando un navegador que no carga
             n = len(self.interceptor.pendientes())
-            piezas += [(f"INTERCEPTA{f' ({n})' if n else ''}", "bold #e05c5c"),
-                       ("  ·  ", "#39404f")]
+            piezas += [(f"INTERCEPTA{f' ({n})' if n else ''}", f"bold {P.peligro}"),
+                       ("  ·  ", P.separador)]
         piezas.append(
-            (motor, "#6fcf8f" if self.engine and self.engine.running else "#e05c5c"))
+            (motor, P.bien if self.engine and self.engine.running else P.peligro))
         self.query_one("#estado", Static).update(Text.assemble(*piezas))
 
     # ------------------------------------------------------------------
@@ -527,22 +540,22 @@ class LuzxferApp(App):
     def _pintar_detalle(self, f: Flow) -> None:
         partes_req = []
         if f.note:
-            partes_req.append((f"✎ {f.note}\n\n", "#f0a93b"))
-        partes_req.append((f.request.raw(), "#c7cdd9"))
+            partes_req.append((f"✎ {f.note}\n\n", P.acento))
+        partes_req.append((f.request.raw(), P.cuerpo))
         self._poner("req", Text.assemble(*partes_req))
 
         if f.error:
-            self._poner("resp", Text(f"error de red\n\n{f.error}", style="#e05c5c"))
+            self._poner("resp", Text(f"error de red\n\n{f.error}", style=P.peligro))
             return
         if f.response is None:
-            self._poner("resp", Text("sin respuesta", style="italic #5c6578"))
+            self._poner("resp", Text("sin respuesta", style=f"italic {P.tenue}"))
             return
 
         r = f.response
         texto, nota = cuerpo.presentar(r.decoded_body(), r.content_type,
                                        bonito=self.cuerpo_bonito)
 
-        partes = [(r.raw_headers() + "\n\n", "#7b8496")]
+        partes = [(r.raw_headers() + "\n\n", P.secundario)]
         if r.sin_decodificar():
             # callarlo hace parecer que el servidor contesto basura, y de
             # paso esconde que el detector no pudo leer este cuerpo
@@ -553,10 +566,10 @@ class LuzxferApp(App):
                 f"  candidatos, no los va a haber.\n"
                 f"  Por el proxy no deberia pasar; si pasa, el servidor ignoro\n"
                 f"  el Accept-Encoding. Solucion:  pip install 'luzxfer[br]'\n\n",
-                "#f0a93b"))
+                P.acento))
         if nota:
-            partes.append((f"— {nota}\n\n", "#5fa8d3"))
-        partes.append((texto, "#c7cdd9"))
+            partes.append((f"— {nota}\n\n", P.info))
+        partes.append((texto, P.cuerpo))
         self._poner("resp", Text.assemble(*partes))
 
     def _poner(self, lado: str, texto: Text) -> None:
@@ -662,7 +675,7 @@ class LuzxferApp(App):
             self.query_one("#estado", Static).update(Text(
                 f"barrido: {e.total} peticiones contra "
                 f"{self._flujo_actual.request.host} · b otra vez para lanzarlo",
-                style="#e05c5c"))
+                style=P.peligro))
             return
 
         self._barrido_avisado = False
@@ -808,7 +821,7 @@ class LuzxferApp(App):
             self.query_one("#flujos", DataTable).update_cell(
                 str(f.id), self._col_id,
                 Text(f"{'●' if f.marked else ''}{f.id}",
-                     style="#f0a93b" if f.marked else "#7b8496"))
+                     style=P.acento if f.marked else P.secundario))
         except Exception:
             pass                                # la fila no esta visible con el filtro
 

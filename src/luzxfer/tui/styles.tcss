@@ -4,122 +4,122 @@
    tabla de trafico. */
 
 Screen {
-    background: #0b0c10;
-    color: #d9dde5;
+    background: $lx-fondo;
+    color: $lx-texto;
 }
 
 Header {
-    background: #14161c;
-    color: #f0a93b;
+    background: $lx-panel;
+    color: $lx-acento;
     text-style: bold;
 }
 
 Footer {
-    background: #14161c;
-    color: #7b8496;
+    background: $lx-panel;
+    color: $lx-secundario;
 }
 
 Footer > .footer-key--key {
-    background: #1b1e26;
-    color: #f0a93b;
+    background: $lx-elevado;
+    color: $lx-acento;
     text-style: bold;
 }
 
 Footer > .footer-key--description {
-    background: #14161c;
-    color: #99a2b3;
+    background: $lx-panel;
+    color: $lx-atenuado;
 }
 
 /* ---------------------------------------------------------------- barra */
 #barra {
     height: 3;
-    background: #14161c;
+    background: $lx-panel;
     padding: 0 1;
-    border-bottom: solid #262a35;
+    border-bottom: solid $lx-borde;
 }
 
 #barra Input {
     width: 1fr;
-    background: #0b0c10;
-    color: #d9dde5;
-    border: tall #262a35;
+    background: $lx-fondo;
+    color: $lx-texto;
+    border: tall $lx-borde;
     padding: 0 1;
 }
 
 #barra Input:focus {
-    border: tall #f0a93b;
+    border: tall $lx-acento;
 }
 
 #estado {
     width: auto;
     min-width: 34;
     content-align: right middle;
-    color: #7b8496;
+    color: $lx-secundario;
     padding: 1 1 0 2;
 }
 
 /* ---------------------------------------------------------------- tabla */
 #flujos {
     height: 1fr;
-    background: #0b0c10;
+    background: $lx-fondo;
     border: none;
-    scrollbar-background: #14161c;
-    scrollbar-color: #39404f;
-    scrollbar-color-hover: #f0a93b;
+    scrollbar-background: $lx-panel;
+    scrollbar-color: $lx-separador;
+    scrollbar-color-hover: $lx-acento;
     scrollbar-size: 1 1;
 }
 
 #flujos > .datatable--header {
-    background: #14161c;
-    color: #7b8496;
+    background: $lx-panel;
+    color: $lx-secundario;
     text-style: bold;
 }
 
 #flujos > .datatable--cursor {
-    background: #2a2f3d;
-    color: #ffffff;
+    background: $lx-superficie;
+    color: $lx-texto;
     text-style: bold;
 }
 
 #flujos > .datatable--hover {
-    background: #1b1e26;
+    background: $lx-elevado;
 }
 
 /* -------------------------------------------------------------- detalle */
 #detalle {
     height: 50%;
     min-height: 8;
-    border-top: solid #262a35;
-    background: #0e1016;
+    border-top: solid $lx-borde;
+    background: $lx-modal;
 }
 
 #detalle Tabs {
-    background: #14161c;
+    background: $lx-panel;
 }
 
 #detalle Tab {
-    color: #7b8496;
+    color: $lx-secundario;
     padding: 0 2;
 }
 
 #detalle Tab.-active {
-    color: #f0a93b;
+    color: $lx-acento;
     text-style: bold;
 }
 
 #detalle Underline > .underline--bar {
-    color: #f0a93b;
-    background: #262a35;
+    color: $lx-acento;
+    background: $lx-borde;
 }
 
 .panel {
-    background: #0e1016;
-    color: #c7cdd9;
+    background: $lx-modal;
+    color: $lx-cuerpo;
     padding: 1 2;
     height: 1fr;
     overflow-y: auto;
-    scrollbar-background: #14161c;
-    scrollbar-color: #39404f;
+    scrollbar-background: $lx-panel;
+    scrollbar-color: $lx-separador;
     scrollbar-size: 1 1;
 }
 
@@ -131,13 +131,13 @@ RepeaterScreen {
 #rep-caja {
     width: 90%;
     height: 90%;
-    background: #0e1016;
-    border: round #f0a93b;
+    background: $lx-modal;
+    border: round $lx-acento;
     padding: 1 2;
 }
 
 #rep-titulo {
-    color: #f0a93b;
+    color: $lx-acento;
     text-style: bold;
     height: 1;
     margin-bottom: 1;
@@ -145,13 +145,13 @@ RepeaterScreen {
 
 #rep-editor {
     height: 1fr;
-    background: #0b0c10;
-    color: #d9dde5;
-    border: tall #262a35;
+    background: $lx-fondo;
+    color: $lx-texto;
+    border: tall $lx-borde;
 }
 
 #rep-editor:focus {
-    border: tall #f0a93b;
+    border: tall $lx-acento;
 }
 
 /* El borde y el alto van en el contenedor con scroll; la salida crece con
@@ -159,18 +159,18 @@ RepeaterScreen {
    cortada al alto visible y no habia nada que desplazar. */
 #rep-scroll {
     height: 1fr;
-    background: #0b0c10;
-    border: tall #262a35;
-    scrollbar-background: #14161c;
-    scrollbar-color: #39404f;
-    scrollbar-color-hover: #f0a93b;
+    background: $lx-fondo;
+    border: tall $lx-borde;
+    scrollbar-background: $lx-panel;
+    scrollbar-color: $lx-separador;
+    scrollbar-color-hover: $lx-acento;
     scrollbar-size: 1 1;
 }
 
 #rep-salida {
     height: auto;
-    background: #0b0c10;
-    color: #c7cdd9;
+    background: $lx-fondo;
+    color: $lx-cuerpo;
     padding: 0 1;
 }
 
@@ -184,43 +184,43 @@ RepeaterScreen {
 }
 
 Button {
-    background: #1b1e26;
-    color: #d9dde5;
+    background: $lx-elevado;
+    color: $lx-texto;
     border: none;
     min-width: 12;
 }
 
 Button.-primary {
-    background: #f0a93b;
-    color: #0b0c10;
+    background: $lx-acento;
+    color: $lx-fondo;
     text-style: bold;
 }
 
 Button:hover {
-    background: #2a2f3d;
+    background: $lx-superficie;
 }
 
 Button.-primary:hover {
-    background: #ffc062;
+    background: $lx-acento_suave;
 }
 
 /* ------------------------------------------------------------ hallazgos */
 #hallazgos {
     height: 1fr;
-    background: #0e1016;
+    background: $lx-modal;
 }
 
 #hallazgos > .datatable--header {
-    background: #14161c;
-    color: #7b8496;
+    background: $lx-panel;
+    color: $lx-secundario;
 }
 
 #hallazgos > .datatable--cursor {
-    background: #2a2f3d;
+    background: $lx-superficie;
 }
 
 .vacio {
-    color: #5c6578;
+    color: $lx-tenue;
     padding: 2 2;
     text-style: italic;
 }
@@ -229,8 +229,8 @@ Button.-primary:hover {
 #ses-caja {
     width: 80%;
     height: 70%;
-    background: #0e1016;
-    border: round #f0a93b;
+    background: $lx-modal;
+    border: round $lx-acento;
     padding: 1 2;
 }
 
@@ -252,8 +252,8 @@ Button.-primary:hover {
 #nota-caja {
     width: 70%;
     height: auto;
-    background: #0e1016;
-    border: round #f0a93b;
+    background: $lx-modal;
+    border: round $lx-acento;
     padding: 1 2;
 }
 
@@ -286,8 +286,8 @@ Button.-primary:hover {
 #int-caja {
     width: 96%;
     height: 94%;
-    background: #0e1016;
-    border: round #f0a93b;
+    background: $lx-modal;
+    border: round $lx-acento;
     padding: 1 2;
 }
 
@@ -311,8 +311,8 @@ Button.-primary:hover {
 #alc-caja {
     width: 76%;
     height: 80%;
-    background: #0e1016;
-    border: round #f0a93b;
+    background: $lx-modal;
+    border: round $lx-acento;
     padding: 1 2;
 }
 
@@ -328,8 +328,8 @@ Button.-primary:hover {
 #mapa-caja {
     width: 86%;
     height: 86%;
-    background: #0e1016;
-    border: round #f0a93b;
+    background: $lx-modal;
+    border: round $lx-acento;
     padding: 1 2;
 }
 
@@ -341,8 +341,8 @@ Button.-primary:hover {
 #itc-caja {
     width: 88%;
     height: 82%;
-    background: #0e1016;
-    border: round #e05c5c;
+    background: $lx-modal;
+    border: round $lx-peligro;
     padding: 1 2;
 }
 
@@ -356,8 +356,8 @@ Button.-primary:hover {
 #cob-caja {
     width: 94%;
     height: 90%;
-    background: #0e1016;
-    border: round #f0a93b;
+    background: $lx-modal;
+    border: round $lx-acento;
     padding: 1 2;
 }
 

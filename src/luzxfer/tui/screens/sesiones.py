@@ -15,6 +15,7 @@ from textual.screen import ModalScreen
 from textual.widgets import DataTable, Static
 
 from ...core import sesiones
+from ..paleta import P
 
 
 class SesionesScreen(ModalScreen[str | None]):
@@ -34,14 +35,14 @@ class SesionesScreen(ModalScreen[str | None]):
         with Vertical(id="ses-caja"):
             yield Static(
                 Text.assemble(
-                    ("sesiones", "bold #f0a93b"),
-                    (f"  ·  {sesiones.dir_sesiones()}", "#5c6578"),
+                    ("sesiones", f"bold {P.acento}"),
+                    (f"  ·  {sesiones.dir_sesiones()}", P.tenue),
                 ),
                 id="ses-titulo",
             )
             yield DataTable(id="ses-tabla", cursor_type="row")
             yield Static(
-                Text("enter abrir · supr borrar · esc cerrar", style="#5c6578"),
+                Text("enter abrir · supr borrar · esc cerrar", style=P.tenue),
                 id="ses-ayuda",
             )
 
@@ -63,20 +64,20 @@ class SesionesScreen(ModalScreen[str | None]):
             self._resumenes[s.nombre] = s
             abierta = s.nombre == self.actual
             nombre = Text(f"{'● ' if abierta else '  '}{s.nombre}",
-                          style="bold #f0a93b" if abierta else "#d9dde5")
+                          style=f"bold {P.acento}" if abierta else P.texto)
             if s.ilegible:
                 # se lista igual: ocultarla haria pensar que no esta
-                t.add_row(nombre, Text("ilegible", style="#e05c5c"),
-                          Text("—", style="#5c6578"), Text("—", style="#5c6578"),
+                t.add_row(nombre, Text("ilegible", style=P.peligro),
+                          Text("—", style=P.tenue), Text("—", style=P.tenue),
                           key=s.nombre)
                 continue
             t.add_row(
                 nombre,
-                Text(str(s.flujos), style="#a8b0c0"),
+                Text(str(s.flujos), style=P.atenuado),
                 Text(str(s.candidatos),
-                     style="#f0a93b" if s.candidatos else "#5c6578"),
+                     style=P.acento if s.candidatos else P.tenue),
                 Text(time.strftime("%Y-%m-%d %H:%M", time.localtime(s.modificada)),
-                     style="#7b8496"),
+                     style=P.secundario),
                 key=s.nombre,
             )
 

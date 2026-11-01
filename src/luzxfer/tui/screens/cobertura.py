@@ -22,13 +22,14 @@ from textual.widgets import DataTable, Static
 from ...core import sesiones
 from ...core.tools import cobertura as cob
 from ...core.tools import wstg
+from ..paleta import P
 
 COLOR = {
-    wstg.NO_PROBADO: "#7b8496",
-    wstg.PROBADO: "#f0a93b",
-    wstg.PASA: "#6fcf8f",
-    wstg.FALLA: "bold #e05c5c",
-    wstg.NO_APLICA: "#5c6578",
+    wstg.NO_PROBADO: P.secundario,
+    wstg.PROBADO: P.acento,
+    wstg.PASA: P.bien,
+    wstg.FALLA: f"bold {P.peligro}",
+    wstg.NO_APLICA: P.tenue,
 }
 ETIQUETA = {
     wstg.NO_PROBADO: "no probado",
@@ -76,9 +77,9 @@ class CoberturaScreen(ModalScreen):
             for pr in wstg.por_categoria(cat.codigo):
                 e = estados[pr.id]
                 t.add_row(
-                    Text(pr.id, style="#a8b0c0"),
-                    Text(pr.titulo, style="#d9dde5" if e != wstg.NO_PROBADO
-                         else "#7b8496"),
+                    Text(pr.id, style=P.atenuado),
+                    Text(pr.titulo, style=P.texto if e != wstg.NO_PROBADO
+                         else P.secundario),
                     Text(ETIQUETA[e], style=COLOR[e]),
                     key=pr.id,
                 )
@@ -88,16 +89,16 @@ class CoberturaScreen(ModalScreen):
         r = cob.resumen(estados)
         self.query_one("#cob-titulo", Static).update(
             Text.assemble(
-                ("cobertura WSTG v4.2", "bold #f0a93b"),
-                (f"   {cob.porcentaje(estados)} % de lo que aplica", "#a8b0c0"),
-                (f"   ·  {r[wstg.FALLA]} FALLA", "bold #e05c5c"),
-                (f"  ·  {r[wstg.PASA]} pasa", "#6fcf8f"),
-                (f"  ·  {r[wstg.PROBADO]} con candidatos", "#f0a93b"),
-                (f"  ·  {r[wstg.NO_PROBADO]} sin probar", "#7b8496"),
+                ("cobertura WSTG v4.2", f"bold {P.acento}"),
+                (f"   {cob.porcentaje(estados)} % de lo que aplica", P.atenuado),
+                (f"   ·  {r[wstg.FALLA]} FALLA", f"bold {P.peligro}"),
+                (f"  ·  {r[wstg.PASA]} pasa", P.bien),
+                (f"  ·  {r[wstg.PROBADO]} con candidatos", P.acento),
+                (f"  ·  {r[wstg.NO_PROBADO]} sin probar", P.secundario),
             )
         )
 
-    def _aviso(self, texto: str, color: str = "#5c6578") -> None:
+    def _aviso(self, texto: str, color: str = P.tenue) -> None:
         self.query_one("#cob-aviso", Static).update(Text(texto, style=color))
 
     def _seleccionada(self) -> str | None:
@@ -119,7 +120,7 @@ class CoberturaScreen(ModalScreen):
             self._aviso(
                 f"{ident} lo decide la evidencia, no el dedo. Hay "
                 f"{'un hallazgo confirmado' if actual == wstg.FALLA else 'candidatos'} "
-                f"con ese ID.", "#f0a93b")
+                f"con ese ID.", P.acento)
             return
 
         manual = self.app.store.get_cobertura().get(ident, wstg.NO_PROBADO)
@@ -146,9 +147,9 @@ class CoberturaScreen(ModalScreen):
                 flujos=self.app.store.count_flows(),
             ), encoding="utf-8")
         except OSError as e:
-            self._aviso(f"no se pudo escribir el informe: {e}", "#e05c5c")
+            self._aviso(f"no se pudo escribir el informe: {e}", P.peligro)
             return
-        self._aviso(f"informe escrito en {ruta}", "#6fcf8f")
+        self._aviso(f"informe escrito en {ruta}", P.bien)
 
     def action_cerrar(self) -> None:
         self.dismiss()

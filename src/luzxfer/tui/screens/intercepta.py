@@ -19,6 +19,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Static, TextArea
 
 from ...core.tools import intercepta
+from ..paleta import P
 
 VACIO = ("Esperando. La interceptacion esta encendida, asi que el navegador\n"
          "se queda parado hasta que sueltes cada peticion.\n\n"
@@ -48,7 +49,7 @@ class InterceptaScreen(ModalScreen):
             yield TextArea("", id="int-crudo", soft_wrap=False)
             yield Static(
                 Text("ctrl+f soltar · ctrl+d descartar · ctrl+x apagar · "
-                     "esc cerrar (sigue encendida)", style="#5c6578"),
+                     "esc cerrar (sigue encendida)", style=P.tenue),
                 id="itc-ayuda",
             )
 
@@ -78,14 +79,14 @@ class InterceptaScreen(ModalScreen):
             editor.read_only = False
             editor.text = primera.crudo
             self.query_one("#itc-ayuda", Static).update(
-                Text(self.AYUDA, style="#5c6578"))
+                Text(self.AYUDA, style=P.tenue))
         self._titulo(len(pendientes))
 
     def _titulo(self, en_cola: int) -> None:
         self.query_one("#itc-titulo", Static).update(
             Text.assemble(
-                ("[ INTERCEPTACION: ON ]", "bold #e05c5c"),
-                (f"   cola: {en_cola}", "#f0a93b" if en_cola else "#5c6578"),
+                ("[ INTERCEPTACION: ON ]", f"bold {P.peligro}"),
+                (f"   cola: {en_cola}", P.acento if en_cola else P.tenue),
             )
         )
 
@@ -110,7 +111,7 @@ class InterceptaScreen(ModalScreen):
             self._insistido = True
             self.query_one("#itc-ayuda", Static).update(
                 Text(f"{aviso}  ·  ctrl+f otra vez la manda igual",
-                     style="#f0a93b"))
+                     style=P.acento))
             return
         self._resolver(intercepta.SOLTAR, texto)
 
