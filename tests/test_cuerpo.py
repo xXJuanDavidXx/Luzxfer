@@ -190,3 +190,38 @@ def test_un_binario_enorme_tampoco_se_decodifica_entero():
     texto, nota = cuerpo.presentar(enorme, "image/png", bonito=True)
     assert time.time() - t < 0.5
     assert "00000000" in texto and "binario" in nota.lower()
+
+
+# ---------------------------------- sospecha 7: charset que no es utf-8
+def test_se_respeta_el_charset_que_declara_el_servidor():
+    """Los acentos llegaban como el caracter de reemplazo: se decodificaba
+    todo como utf-8 ignorando el Content-Type. Corrupcion silenciosa, y
+    el detector usa el mismo camino, asi que un reflejo con acentos no se
+    encontraba."""
+    latin = '{"mensaje":"contraseña inválida"}'.encode("latin-1")
+    texto, _ = cuerpo.presentar(latin, "application/json; charset=iso-8859-1",
+                                bonito=True)
+    assert "contraseña inválida" in texto
+    assert "�" not in texto
+
+
+def test_charset_de_lee_el_content_type():
+    assert cuerpo.charset_de("text/html; charset=iso-8859-1") == "iso-8859-1"
+    assert cuerpo.charset_de('text/html; charset="utf-8"') == "utf-8"
+    assert cuerpo.charset_de("text/html;charset=Windows-1252") == "windows-1252"
+    assert cuerpo.charset_de("application/json") == "utf-8"
+    assert cuerpo.charset_de("") == "utf-8"
+
+
+def test_un_charset_inventado_no_revienta():
+    """El Content-Type lo escribe el servidor, que puede poner lo que
+    quiera. Un charset inexistente cae a utf-8 en vez de lanzar."""
+    assert cuerpo.charset_de("text/html; charset=no-existe-esto") == "utf-8"
+    texto, _ = cuerpo.presentar(b"hola", "text/html; charset=inventado",
+                                bonito=True)
+    assert texto == "hola"
+
+
+def test_sin_charset_declarado_se_asume_utf8():
+    texto, _ = cuerpo.presentar("ñandú".encode(), "text/html", bonito=True)
+    assert texto == "ñandú"

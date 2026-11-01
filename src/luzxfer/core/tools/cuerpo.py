@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import json
 
+from ..models import charset_de
+
 # Lo que se trata como texto aunque el tipo no empiece por text/.
 MARCAS_DE_TEXTO = (
     "json", "xml", "javascript", "ecmascript", "csv",
@@ -134,7 +136,9 @@ def presentar(
         notas.append("demasiado grande para reorganizarlo")
         datos = datos[:limite + 1]
 
-    texto = datos.decode("utf-8", "replace")
+    # el charset que declare el servidor, no utf-8 a ciegas: si no,
+    # los acentos de un iso-8859-1 salen como caracter de reemplazo
+    texto = datos.decode(charset_de(ctype), "replace")
 
     if bonito and es_json(ctype) and not enorme:
         mejor = embellecer_json(texto)

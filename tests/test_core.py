@@ -487,3 +487,40 @@ def test_una_sesion_de_la_0_2_0_se_abre_sin_migracion(tmp_path):
     assert st.count_flows() == 1          # lo viejo sigue ahi
     assert st.list_ataques() == []        # lo nuevo existe y esta vacio
     st.close()
+
+
+def test_el_detector_encuentra_reflejos_con_acentos_en_latin1():
+    """Sospecha 7, la cara que de verdad duele: el cuerpo se decodificaba
+    como utf-8 pase lo que pase, asi que un reflejo con acentos sobre un
+    servidor en iso-8859-1 no se encontraba nunca."""
+    valor = "contraseña"
+    f = Flow(
+        request=Request(method="GET", url=f"http://o.com/b?q={valor}",
+                        headers=[("Host", "o.com")]),
+        response=Response(status=200,
+                          body=f"<html>buscaste: {valor}</html>".encode("latin-1"),
+                          headers=[("Content-Type",
+                                    "text/html; charset=iso-8859-1")]),
+    )
+    f.id = 1
+    assert any(h.kind == "REFLEJO" for h in detector.analizar(f))
+
+
+def test_response_charset_lee_el_content_type():
+    r = Response(status=200, headers=[("Content-Type", "text/html; charset=latin-1")])
+    assert r.charset == "latin-1"
+    assert Response(status=200).charset == "utf-8"
+
+
+def test_count_resultados_acompana_al_limite(tmp_path):
+    """Sospecha 4: list_resultados tiene limite=10.000, el mismo fallo
+    del historial truncado en otro sitio. Todavia no lo llama nadie, pero
+    sin un contador al lado el que lo llame no podra avisar."""
+    st = Store(tmp_path / "s.db")
+    aid = st.add_ataque("sniper", "o.com", "x", total=25)
+    for n in range(25):
+        st.add_resultado(aid, _res(n))
+    assert st.count_resultados(aid) == 25
+    assert len(st.list_resultados(aid, limite=10)) == 10
+    assert st.count_resultados(aid + 99) == 0
+    st.close()

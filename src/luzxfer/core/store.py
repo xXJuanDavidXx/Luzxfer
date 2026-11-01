@@ -360,6 +360,20 @@ class Store:
                 "SELECT * FROM ataques ORDER BY id DESC").fetchall()
         return [dict(f) for f in filas]
 
+    def count_resultados(self, ataque_id: int) -> int:
+        """Cuantos resultados tiene ese ataque, sin el limite de arriba.
+
+        Va en pareja con list_resultados por la misma razon que
+        count_flows con list_flows: sin un contador al lado, quien pinte
+        la tabla no puede saber que se esta dejando algo fuera, y un
+        ataque truncado en silencio es un ataque mal leido.
+        """
+        with self._lock:
+            fila = self._con.execute(
+                "SELECT COUNT(*) c FROM resultados WHERE ataque_id=?",
+                (ataque_id,)).fetchone()
+        return int(fila["c"])
+
     def list_resultados(self, ataque_id: int, *, limite: int = 10_000) -> list[dict]:
         with self._lock:
             filas = self._con.execute(

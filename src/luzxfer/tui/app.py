@@ -1,6 +1,7 @@
 """La aplicacion. Historial, detalle, filtros y repeater."""
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from rich.text import Text
@@ -248,8 +249,18 @@ class LuzxferApp(App):
         nuevo se agrega al final sin mover los indices de los anteriores, y
         lo que el analista tiene seleccionado no salta mientras llega trafico.
         """
-        self.store.add_flow(flujo)
-        nuevos = [h for h in detector.analizar(flujo) if self.store.add_finding(h)]
+        try:
+            self.store.add_flow(flujo)
+            nuevos = [h for h in detector.analizar(flujo)
+                      if self.store.add_finding(h)]
+        except sqlite3.Error as e:
+            # otra instancia con la sesion tomada, disco lleno, archivo
+            # borrado bajo los pies… Perder un flujo es malo; que la
+            # excepcion suba al bucle de la interfaz y se lleve la sesion
+            # entera por delante es mucho peor.
+            self.notify(f"no se pudo guardar el flujo: {e}",
+                        title="error de la sesion", severity="error", timeout=10)
+            return
 
         tabla = self.query_one("#flujos", DataTable)
         if self._coincide(flujo):
@@ -506,7 +517,7 @@ class LuzxferApp(App):
         self._mostrar_vacio()
         self.refrescar_tabla()
         self.actualizar_estado()
-        self.notify("historial limpiado (los candidatos se conservan)")
+        self.notify("historial limpiado · candidatos y ataques se conservan")
 
     def action_cursor_abajo(self) -> None:
         self.query_one("#flujos", DataTable).action_cursor_down()

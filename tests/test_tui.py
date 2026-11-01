@@ -569,3 +569,44 @@ async def test_la_preferencia_de_cuerpo_sobrevive_al_reinicio(tmp_path):
     async with otra.run_test() as pilot:
         await pilot.pause()
         assert otra.cuerpo_bonito is False
+
+
+async def test_limpiar_conserva_candidatos_y_ataques(tmp_path):
+    """Sospecha 5: c borra flujos pero no ataques, y el aviso solo
+    hablaba de los candidatos. Si no se dice, parece que se perdieron."""
+    app = LuzxferApp(db=str(tmp_path / "s.db"), arrancar_motor=False)
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo())
+        await pilot.pause()
+        aid = app.store.add_ataque("sniper", "ej.com", "x", total=1)
+        assert app.store.count_flows() == 1
+
+        await pilot.press("c")
+        await pilot.pause()
+        assert app.store.count_flows() == 0
+        assert app.store.count_findings() > 0           # candidatos intactos
+        assert [a["id"] for a in app.store.list_ataques()] == [aid]
+
+
+async def test_si_el_almacen_falla_se_avisa_y_la_app_sigue_viva(tmp_path):
+    """Sospecha 9: con otra instancia escribiendo, add_flow lanza. Antes
+    la excepcion subia por el bucle de la interfaz. Un flujo perdido es
+    malo; perder la sesion entera por un bloqueo de SQLite es peor."""
+    import sqlite3
+
+    ruta = tmp_path / "s.db"
+    app = LuzxferApp(db=str(ruta), arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        otra = sqlite3.connect(ruta, isolation_level=None)
+        otra.execute("BEGIN EXCLUSIVE")
+        try:
+            app.store._con.execute("PRAGMA busy_timeout = 50")
+            app._ingresar(_flujo())              # no debe propagar
+            await pilot.pause()
+        finally:
+            otra.close()
+        assert app.is_running
+        app._ingresar(_flujo())                  # y sigue sirviendo despues
+        await pilot.pause()
+        assert app.store.count_flows() >= 1

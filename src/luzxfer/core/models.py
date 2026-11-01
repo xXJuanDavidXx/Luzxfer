@@ -6,6 +6,7 @@ y sin dependencias es lo que permite cambiar de motor sin tocar nada mas.
 """
 from __future__ import annotations
 
+import codecs
 import gzip
 import time
 import zlib
@@ -42,6 +43,29 @@ except ImportError:
 CODIFICACIONES_LEGIBLES = frozenset(
     {"gzip", "x-gzip", "deflate", "identity"} | ({"br"} if _brotli else set())
 )
+
+
+def charset_de(ctype: str) -> str:
+    """El charset declarado en un Content-Type, o utf-8 si no hay.
+
+    Importa mas de lo que parece: decodificarlo todo como utf-8 convierte
+    los acentos de un servidor en iso-8859-1 en caracteres de reemplazo,
+    en silencio. Y como el detector mira ese mismo texto, un reflejo con
+    acentos dejaba de encontrarse.
+
+    Un charset inexistente cae a utf-8 en vez de lanzar: el Content-Type
+    lo escribe el servidor y puede poner lo que le de la gana.
+    """
+    for parte in (ctype or "").split(";")[1:]:
+        clave, _, valor = parte.partition("=")
+        if clave.strip().lower() == "charset":
+            nombre = valor.strip().strip('"').strip("'").lower()
+            try:
+                codecs.lookup(nombre)
+            except (LookupError, ValueError):
+                return "utf-8"
+            return nombre or "utf-8"
+    return "utf-8"
 
 
 def filtrar_accept_encoding(valor: str) -> str:
@@ -168,11 +192,15 @@ class Response:
         """Si el cuerpo quedo comprimido porque no sabemos deshacerlo."""
         return bool(self.encoding) and self.encoding not in CODIFICACIONES_LEGIBLES
 
+    @property
+    def charset(self) -> str:
+        return charset_de(self.header("content-type") or "")
+
     def text(self, limite: int | None = None) -> str:
         datos = self.decoded_body()
         if limite is not None:
             datos = datos[:limite]
-        return datos.decode("utf-8", "replace")
+        return datos.decode(self.charset, "replace")
 
     def raw_headers(self) -> str:
         linea = f"{self.http_version} {self.status} {self.reason}".rstrip()
