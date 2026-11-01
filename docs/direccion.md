@@ -240,3 +240,19 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   un atajo y un motor que no entrega un flujo son el mismo fallo —callar—
   y los tres producen la misma consecuencia: el analista concluye que no
   hay nada donde sí lo había.
+- **2026-11-01** — Exportación a `curl` (`u`), que era una brecha real
+  contra Burp: no había **ninguna** forma de sacar una petición de la
+  herramienta, y un hallazgo que solo existe dentro de tu pantalla cuesta
+  de defender ante un cliente.
+  **Lo que enseñó este incremento no fue la función, fue el test.** Escribí
+  el exportador con `--data-binary` creyendo que así el cuerpo viajaba
+  intacto. El test que ejecuta el comando de verdad contra el servidor de
+  eco falló enseñando el `/etc/passwd` de esta máquina: `-d` y
+  `--data-binary` interpretan un `@` inicial como «lee este archivo». Es
+  decir, el exportador convertía un cuerpo capturado que empezara por `@`
+  en una fuga de archivos hacia el objetivo. El flag correcto es
+  `--data-raw`.
+  **La regla que queda:** un test que comprueba la *forma* del texto
+  exportado habría pasado con ese fallo dentro. Lo que exporta la
+  herramienta se prueba **ejecutándolo**, no mirándolo. Vale para el curl
+  de hoy y para cualquier otro formato que salga de aquí.

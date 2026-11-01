@@ -38,7 +38,7 @@ GRUPOS: tuple[tuple[str, tuple[str, ...]], ...] = (
      ("repeater", "intruder", "interceptar", "barrido", "mapa",
       "alcance", "cobertura", "conversor", "comparar")),
     ("el flujo elegido",
-     ("marcar", "nota", "confirmar", "vista", "cuerpo")),
+     ("marcar", "nota", "confirmar", "vista", "cuerpo", "exportar")),
     ("la sesion",
      ("sesiones", "limpiar", "ayuda", "salir")),
 )

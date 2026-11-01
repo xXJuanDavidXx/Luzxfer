@@ -5,7 +5,7 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
-## [0.6.1] — 2026-11-01
+## [0.7.0] — 2026-11-01
 
 ### Corregido
 - **El pie de la pantalla recortaba trece de veinte atajos sin avisar.**
@@ -27,23 +27,6 @@ experiencia de quien ya usaba la herramienta.
   de loopback, y la sección de seguridad advertía sobre ello sin nombrarla,
   así que no se podía saber qué no había que tocar.
 
-### Añadido
-- **Pantalla de ayuda (`?`)**: las veinticuatro teclas agrupadas por para
-  qué sirven —moverse, herramientas, el flujo elegido, la sesión—. Se
-  construye de los atajos **activos**, no de una lista escrita a mano: una
-  ayuda mantenida aparte del código se desincroniza en el primer cambio y
-  entonces es peor que no tenerla, porque manda a probar teclas muertas.
-  Si remapeaste un atajo en tu `config.ini`, ahí sale el tuyo.
-  - Traduce los nombres de Textual a los del teclado: `slash` sale como
-    `/`, `escape` como `esc`.
-  - Un atajo que nadie clasificó aparece igual, al final, bajo «otros»:
-    perderlo ahí sería repetir el fallo del pie, solo que más escondido.
-    Hay un test que falla si alguien añade una tecla y no la coloca.
-- `ayuda` es una acción configurable más, como el resto.
-- `esc` (devolver el foco al historial) está documentado por primera vez.
-## [Sin publicar]
-
-### Corregido
 - **Los dos motores descartaban en silencio los flujos que no lograban
   entregar al núcleo.** El `except Exception: pass` protegía lo correcto
   —que un consumidor roto no tumbe el proxy, porque entonces el navegador
@@ -60,64 +43,51 @@ experiencia de quien ya usaba la herramienta.
     distintos, y un contador de evidencia perdida que se queda corto bajo
     concurrencia subestima justo lo que hay que no subestimar.
 
+### Añadido
+- **Pantalla de ayuda (`?`)**: las veinticuatro teclas agrupadas por para
+  qué sirven —moverse, herramientas, el flujo elegido, la sesión—. Se
+  construye de los atajos **activos**, no de una lista escrita a mano: una
+  ayuda mantenida aparte del código se desincroniza en el primer cambio y
+  entonces es peor que no tenerla, porque manda a probar teclas muertas.
+  Si remapeaste un atajo en tu `config.ini`, ahí sale el tuyo.
+  - Traduce los nombres de Textual a los del teclado: `slash` sale como
+    `/`, `escape` como `esc`.
+  - Un atajo que nadie clasificó aparece igual, al final, bajo «otros»:
+    perderlo ahí sería repetir el fallo del pie, solo que más escondido.
+    Hay un test que falla si alguien añade una tecla y no la coloca.
+- `ayuda` es una acción configurable más, como el resto.
+- `esc` (devolver el foco al historial) está documentado por primera vez.
+- **Exportar (`u`)**: el flujo como comando `curl`, como petición cruda o
+  como respuesta cruda, recorriéndolas con `tab`, y `ctrl+y` al
+  portapapeles. Era una brecha real contra Burp —«Copy as curl command» es
+  de lo que más se usa— y además es lo que permite entregarle a un cliente
+  algo que puede ejecutar él mismo: un hallazgo que solo existe dentro de
+  tu pantalla cuesta de defender.
+  - El `curl` reproduce lo que viajó. Todo va entre comillas aunque no haga
+    falta, porque editar el comando es para lo que se exporta y un `&` en
+    un argumento desnudo lo parte en dos.
+  - Las cabeceras salen todas, `Content-Length` incluida, con un aviso de
+    que hay que ajustarla si editas el cuerpo. Decidir por el analista que
+    una cabecera sobra es como un export deja de ser evidencia.
+  - Un cuerpo que no es texto viaja en base64 y se deshace en la tubería.
+  - El portapapeles no promete haber funcionado: OSC 52 lo ignoran muchos
+    terminales sin decir nada, y por eso el texto está en un editor
+    seleccionable.
+
 ### Cambiado
 - `_emitir` vive una sola vez, en la clase `Engine`. Estaba duplicado en
   los dos motores, que es como una corrección se queda a medias sin que
   nadie lo note. Hay un test que falla si un motor vuelve a traerse el suyo.
 
-## [0.4.0] — 2026-11-01
-
-### Añadido
-- **Alcance** (`a`): reglas de inclusión y exclusión escritas como texto,
-  con comodín de subdominios, puerto y prefijo de ruta opcionales.
-  - Filtra la vista del historial (`ctrl+f`) y lo que analiza el detector,
-    **nunca la captura**: el tráfico fuera de alcance se guarda igual.
-  - Excluir siempre gana; sin reglas, todo está dentro.
-  - Propone el host del flujo que estés mirando cuando aún no hay alcance.
-  - Una línea mal escrita se señala sin tumbar las demás.
-- **Mapa del sitio** (`e`): árbol de hosts y rutas construido del
-  tráfico ya capturado, sin pedirle nada al servidor. Marca los tramos
-  `no pedido` —existen porque algo más abajo se pidió— que son los que
-  vale la pena probar a mano. `enter` lleva al flujo en el historial.
-  Respeta el alcance si está filtrando.
-- **Interceptación en vuelo** (`x`): parar una petición antes de que salga,
-  editarla y soltarla, o descartarla. Es lo que separa la herramienta de un
-  visor de tráfico: el repeater manda una *segunda* petición, y contra un
-  token de un solo uso eso no sirve.
-  - Arranca apagada; una petición detenida es una pestaña que no carga.
-  - Si nadie contesta en 120 s la petición sale sola, y al apagar o cerrar
-    se suelta todo lo detenido: nunca queda nadie colgado.
-  - Editar el `Host` no cambia el destino, para poder probar inyección por
-    Host header. Descartar corta la conexión sin contestar.
-  - Avisa antes de perder en silencio un payload con espacios en la línea
-    de petición.
-- **Barrido activo / DAST** (`b`): reflejo sin escapar, error de SQL,
-  redirección abierta y traversal, sobre query y cuerpo de formulario.
-  - Exige alcance configurado y se niega contra lo que no autorice.
-  - Doble pulsación para lanzarlo: la primera dice cuántas peticiones.
-  - 2 concurrentes, tope de 5/s del barrido entero.
-  - Los hallazgos entran como candidatos sin confirmar.
-- **Matriz de cobertura WSTG e informes** (`w`): las 97 pruebas de la v4.2
-  con sus identificadores y títulos tomados del documento oficial.
-  - `FALLA` y `con candidatos` salen de la evidencia; `pasa` y `no aplica`
-    las pone una persona. La evidencia gana a la opinión.
-  - Lo que no aplica sale del denominador del porcentaje, y un candidato
-    sin dictaminar no cuenta como cobertura.
-  - `ctrl+g` genera el informe en Markdown con alcance, resumen,
-    hallazgos confirmados con sus flujos de evidencia, la matriz entera y
-    los candidatos en un apéndice.
-
-### Corregido
-- **El detector reclamaba `WSTG-CONF-07` por cualquier cabecera de
-  seguridad ausente**, y CONF-07 es «Test HTTP Strict Transport Security»:
-  el informe habría dicho que se probó HSTS porque faltaba un CSP. Ahora
-  `X-Frame-Options` va a `WSTG-CLNT-09`, HSTS a `WSTG-CONF-07` y solo
-  sobre https, y las que no tienen prueba propia en la v4.2 se reportan
-  **sin ID**. El detector gana además la comprobación de HSTS.
-
-## [No publicado]
-
-Nada todavía.
+### Seguridad
+- El exportador usa **`--data-raw` y no `--data-binary`**. Los dos últimos
+  interpretan un `@` inicial como «lee este archivo del disco y mándalo»:
+  un cuerpo capturado que empezara por `@/etc/passwd` habría convertido el
+  comando exportado en una fuga de archivos de la máquina de quien lo
+  pegara, hacia el objetivo. Lo encontró el test que ejecuta el comando de
+  verdad contra el servidor de eco, mientras el código aún usaba
+  `--data-binary`: el eco recibió el `/etc/passwd` de esta máquina. El test
+  se queda como garantía, y se ha comprobado que falla si se revierte.
 
 ## [0.6.0] — 2026-11-01
 
@@ -180,6 +150,56 @@ Nada todavía.
   - Un plugin roto no impide que carguen los demás ni corta el análisis.
   - Los IDs WSTG inventados se descartan antes de llegar a la matriz.
   - `--sin-plugins` los desactiva; la barra dice cuántos hay cargados.
+
+## [0.4.0] — 2026-11-01
+
+### Añadido
+- **Alcance** (`a`): reglas de inclusión y exclusión escritas como texto,
+  con comodín de subdominios, puerto y prefijo de ruta opcionales.
+  - Filtra la vista del historial (`ctrl+f`) y lo que analiza el detector,
+    **nunca la captura**: el tráfico fuera de alcance se guarda igual.
+  - Excluir siempre gana; sin reglas, todo está dentro.
+  - Propone el host del flujo que estés mirando cuando aún no hay alcance.
+  - Una línea mal escrita se señala sin tumbar las demás.
+- **Mapa del sitio** (`e`): árbol de hosts y rutas construido del
+  tráfico ya capturado, sin pedirle nada al servidor. Marca los tramos
+  `no pedido` —existen porque algo más abajo se pidió— que son los que
+  vale la pena probar a mano. `enter` lleva al flujo en el historial.
+  Respeta el alcance si está filtrando.
+- **Interceptación en vuelo** (`x`): parar una petición antes de que salga,
+  editarla y soltarla, o descartarla. Es lo que separa la herramienta de un
+  visor de tráfico: el repeater manda una *segunda* petición, y contra un
+  token de un solo uso eso no sirve.
+  - Arranca apagada; una petición detenida es una pestaña que no carga.
+  - Si nadie contesta en 120 s la petición sale sola, y al apagar o cerrar
+    se suelta todo lo detenido: nunca queda nadie colgado.
+  - Editar el `Host` no cambia el destino, para poder probar inyección por
+    Host header. Descartar corta la conexión sin contestar.
+  - Avisa antes de perder en silencio un payload con espacios en la línea
+    de petición.
+- **Barrido activo / DAST** (`b`): reflejo sin escapar, error de SQL,
+  redirección abierta y traversal, sobre query y cuerpo de formulario.
+  - Exige alcance configurado y se niega contra lo que no autorice.
+  - Doble pulsación para lanzarlo: la primera dice cuántas peticiones.
+  - 2 concurrentes, tope de 5/s del barrido entero.
+  - Los hallazgos entran como candidatos sin confirmar.
+- **Matriz de cobertura WSTG e informes** (`w`): las 97 pruebas de la v4.2
+  con sus identificadores y títulos tomados del documento oficial.
+  - `FALLA` y `con candidatos` salen de la evidencia; `pasa` y `no aplica`
+    las pone una persona. La evidencia gana a la opinión.
+  - Lo que no aplica sale del denominador del porcentaje, y un candidato
+    sin dictaminar no cuenta como cobertura.
+  - `ctrl+g` genera el informe en Markdown con alcance, resumen,
+    hallazgos confirmados con sus flujos de evidencia, la matriz entera y
+    los candidatos en un apéndice.
+
+### Corregido
+- **El detector reclamaba `WSTG-CONF-07` por cualquier cabecera de
+  seguridad ausente**, y CONF-07 es «Test HTTP Strict Transport Security»:
+  el informe habría dicho que se probó HSTS porque faltaba un CSP. Ahora
+  `X-Frame-Options` va a `WSTG-CLNT-09`, HSTS a `WSTG-CONF-07` y solo
+  sobre https, y las que no tienen prueba propia en la v4.2 se reportan
+  **sin ID**. El detector gana además la comprobación de HSTS.
 
 ## [0.3.0] — 2026-11-01
 

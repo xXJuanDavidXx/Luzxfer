@@ -408,3 +408,18 @@ Button.-primary:hover {
 #ayuda-titulo { height: 1; margin-bottom: 1; }
 
 #ayuda-scroll { height: 1fr; }
+
+/* exportar */
+#exp-caja {
+    width: 92%;
+    height: 80%;
+    background: $lx-modal;
+    border: round $lx-acento;
+    padding: 1 2;
+}
+
+#exp-titulo { height: 1; margin-bottom: 1; }
+
+#exp-texto { height: 1fr; border: round $lx-borde; }
+
+#exp-avisos { height: auto; margin-top: 1; }
