@@ -15,6 +15,11 @@ experiencia de quien ya usaba la herramienta.
   - Excluir siempre gana; sin reglas, todo está dentro.
   - Propone el host del flujo que estés mirando cuando aún no hay alcance.
   - Una línea mal escrita se señala sin tumbar las demás.
+- **Mapa del sitio** (`e`): árbol de hosts y rutas construido del
+  tráfico ya capturado, sin pedirle nada al servidor. Marca los tramos
+  `no pedido` —existen porque algo más abajo se pidió— que son los que
+  vale la pena probar a mano. `enter` lleva al flujo en el historial.
+  Respeta el alcance si está filtrando.
 
 ## [0.3.0] — 2026-11-01
 

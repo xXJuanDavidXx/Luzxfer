@@ -104,6 +104,7 @@ ignorado.
 | `m` | marcar un flujo |
 | `v` | confirmar el candidato seleccionado como hallazgo |
 | `a` | alcance: qué entra en el contrato |
+| `e` | mapa del sitio |
 | `s` | sesiones |
 | `c` | limpiar el historial (los candidatos se conservan) |
 | `g` / `G` | primer / último flujo |
@@ -192,6 +193,42 @@ Los resultados **no entran al historial**: van a su propia tabla dentro de la
 sesión. Diez mil peticiones volverían el historial inservible para lo que es,
 y el detector correría sobre las diez mil generando miles de candidatos
 basura.
+
+## Mapa del sitio
+
+`e` abre el árbol. El historial responde «qué pasó y en qué orden»; el
+mapa responde «qué forma tiene el objetivo». Mirando tres mil filas no se
+ve que existe un `/admin/` con tres rutas dentro, y eso es lo que uno vino
+a buscar.
+
+```
+objetivo.com  ×9
+  /  200
+  admin  no pedido
+    panel  302
+  api  no pedido  ×4
+    v1  no pedido  ×3
+      basket  200
+      users  200
+        7  403
+  login  200  401  ×2
+```
+
+**`no pedido` es la pista más barata que da el mapa:** `/admin` existe en
+el árbol solo porque alguien pidió `/admin/panel`. Nadie ha tocado
+`/admin` todavía, y a lo mejor contesta algo.
+
+El contador dice cosas distintas según la fila, y por eso se elige uno
+solo: en una ruta visitada, cuántas veces se pidió **esa** ruta; en un
+tramo no pedido, cuánto hay debajo. `login ×2` significa que se pidió dos
+veces, no que tenga dos hijos.
+
+`enter` sobre una rama lleva al flujo que la produjo, en el historial. Ver
+la forma no sirve de nada si volver al detalle cuesta.
+
+El mapa se arma del tráfico que ya se capturó, sin pedirle nada al
+servidor: esto ordena, no rastrea. Y respeta el alcance si lo tienes
+filtrando.
 
 ## Alcance
 
@@ -327,7 +364,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] Notas, hallazgos confirmados, petición y respuesta lado a lado
 - [x] Intruder, cuatro modos, con grep-match sobre los resultados
 - [x] Alcance: reglas de inclusión y exclusión, filtro del historial
-- [ ] Árbol de sitemap
+- [x] Árbol de sitemap
 - [ ] Interceptar y editar en vuelo — la brecha real contra Burp hoy
 - [ ] DAST con correa: exige alcance, disparo manual, ritmo limitado
 - [ ] Matriz de cobertura WSTG y generación de informes

@@ -23,12 +23,13 @@ from ..core.engine import Builtin, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import alcance as alc
-from ..core.tools import cuerpo, detector
+from ..core.tools import cuerpo, detector, sitemap
 from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
 from .screens.repeater import RepeaterScreen
 from .screens.sesiones import SesionesScreen
+from .screens.sitemap import SitemapScreen
 
 # Cuantos flujos se pintan en la tabla al reconstruirla. No es un limite
 # del almacen: el historial completo sigue en la sesion y se puede filtrar
@@ -73,6 +74,7 @@ class LuzxferApp(App):
         Binding("s", "sesiones", "sesiones"),
         Binding("i", "intruder", "intruder"),
         Binding("a", "alcance", "alcance"),
+        Binding("e", "mapa", "mapa del sitio"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
         Binding("n", "nota", "nota"),
@@ -500,6 +502,32 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         self.actualizar_estado()
         return errores
+
+    def action_mapa(self) -> None:
+        """El mapa se arma de lo que ya se capturo, sin pedirle nada al
+        servidor: esto ordena, no rastrea."""
+        flujos = self.store.list_flows(limite=LIMITE_TABLA)
+        if self.solo_alcance:
+            flujos = [f for f in flujos if self.alcance.dentro(f.request.url)]
+        self.push_screen(SitemapScreen(sitemap.construir(flujos)),
+                         self._ir_al_flujo)
+
+    def _ir_al_flujo(self, fid: int | None) -> None:
+        """Lleva el cursor del historial al flujo elegido en el mapa.
+
+        Si esta fuera de la tabla —filtro de texto o de alcance— se dice,
+        en vez de no hacer nada y parecer que la tecla no funciona.
+        """
+        if fid is None:
+            return
+        tabla = self.query_one("#flujos", DataTable)
+        try:
+            tabla.move_cursor(row=tabla.get_row_index(str(fid)))
+        except Exception:
+            self.notify(f"el flujo {fid} no esta en la tabla; quita el filtro "
+                        f"o el alcance para verlo", severity="warning")
+            return
+        tabla.focus()
 
     def action_alcance(self) -> None:
         sug = (sugerencia_desde(self._flujo_actual.request.url)

@@ -323,3 +323,16 @@ Button.-primary:hover {
 #alc-ayuda { height: auto; margin-top: 1; }
 
 #alc-aviso { height: auto; margin-top: 1; }
+
+/* mapa del sitio */
+#mapa-caja {
+    width: 86%;
+    height: 86%;
+    background: #0e1016;
+    border: round #f0a93b;
+    padding: 1 2;
+}
+
+#mapa-titulo { height: 1; margin-bottom: 1; }
+
+#mapa { height: 1fr; }
