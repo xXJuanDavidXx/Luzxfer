@@ -20,10 +20,29 @@ class ErrorPeticion(ValueError):
 
 
 def parse_raw(texto: str) -> tuple[str, str, str, list[tuple[str, str]], bytes]:
-    """Separa una peticion cruda en (metodo, ruta, version, cabeceras, cuerpo)."""
-    texto = texto.replace("\r\n", "\n")
-    cabeza, _, cuerpo = texto.partition("\n\n")
-    lineas = [ln for ln in cabeza.split("\n") if ln.strip()]
+    """Separa una peticion cruda en (metodo, ruta, version, cabeceras, cuerpo).
+
+    El cuerpo se devuelve tal cual, sin tocarle los saltos de linea: son
+    datos, no formato. Un multipart/form-data EXIGE \\r\\n entre sus partes
+    (RFC 2046), y normalizarlos a \\n hace que el servidor rechace la
+    subida —un fallo silencioso que rompe las pruebas de subida de
+    archivos—. La cabecera, en cambio, se parsea aceptando cualquiera de
+    los dos saltos.
+    """
+    # el separador cabecera/cuerpo es la primera linea en blanco, en
+    # CRLF o en LF, la que aparezca antes
+    corte, sep = None, None
+    for s in ("\r\n\r\n", "\n\n"):
+        i = texto.find(s)
+        if i != -1 and (corte is None or i < corte):
+            corte, sep = i, s
+    if corte is None:
+        cabeza, cuerpo = texto, ""
+    else:
+        cabeza, cuerpo = texto[:corte], texto[corte + len(sep):]
+
+    lineas = [ln for ln in cabeza.replace("\r\n", "\n").split("\n")
+              if ln.strip()]
     if not lineas:
         raise ErrorPeticion("la peticion esta vacia")
 

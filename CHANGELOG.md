@@ -5,6 +5,19 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Corregido
+- **El repeater y el intruder corrompian los saltos de linea del cuerpo.**
+  `parse_raw` normalizaba `\r\n` a `\n` en TODO el texto, cuerpo incluido.
+  Un `multipart/form-data` exige `\r\n` entre sus partes (RFC 2046), asi
+  que al reenviar una subida capturada el servidor la rechazaba —y las
+  pruebas de subida de archivos, de lo mas comun, quedaban rotas sin que
+  nada lo dijera—. Ahora la cabecera se parsea aceptando cualquier salto,
+  pero el cuerpo viaja byte a byte como se escribio. Hay un test de
+  extremo a extremo que manda un multipart contra el servidor de eco y
+  comprueba que llega intacto.
+
 ## [0.8.0] — 2026-11-01
 
 Ergonomía de Repeater e Intruder, a partir del feedback del usuario.
