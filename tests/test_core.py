@@ -238,6 +238,39 @@ def test_parse_raw_rechaza_basura():
         repeater.parse_raw("solounapalabra\r\n\r\n")
 
 
+def test_parse_raw_conserva_los_crlf_del_cuerpo():
+    """Un multipart EXIGE \\r\\n entre sus partes (RFC 2046).
+
+    Si se normalizan a \\n, el servidor rechaza la subida. El cuerpo es
+    datos: sus saltos de linea no se tocan, aunque la cabecera se parsee
+    con cualquiera de los dos.
+    """
+    crudo = ("POST /subir HTTP/1.1\r\nHost: o.com\r\n"
+             "Content-Type: multipart/form-data; boundary=X\r\n\r\n"
+             '--X\r\nContent-Disposition: form-data; name="f"\r\n'
+             "\r\ndato\r\n--X--\r\n")
+    *_, cuerpo = repeater.parse_raw(crudo)
+    assert b"\r\n" in cuerpo
+    assert cuerpo == (b'--X\r\nContent-Disposition: form-data; name="f"\r\n'
+                      b"\r\ndato\r\n--X--\r\n")
+
+
+def test_parse_raw_no_fuerza_crlf_en_un_cuerpo_unix():
+    """Preservar es preservar: un cuerpo con \\n se queda con \\n."""
+    crudo = "POST /x HTTP/1.1\nHost: o.com\n\nlinea1\nlinea2\n"
+    *_, cuerpo = repeater.parse_raw(crudo)
+    assert cuerpo == b"linea1\nlinea2\n"
+    assert b"\r\n" not in cuerpo
+
+
+def test_parse_raw_content_length_cuenta_bytes_no_caracteres():
+    """Un cuerpo UTF-8 con acentos mide mas bytes que caracteres."""
+    crudo = "POST /x HTTP/1.1\r\nHost: o.com\r\n\r\nññññ"
+    *_, cuerpo = repeater.parse_raw(crudo)
+    assert len(cuerpo) == 8        # 4 eñes, 2 bytes cada una
+
+
+
 def test_repeater_recalcula_content_length(objetivo):
     """El error numero uno al editar a mano: dejar el Content-Length viejo."""
     host, puerto = objetivo
@@ -250,6 +283,27 @@ def test_repeater_recalcula_content_length(objetivo):
     assert f.source == "repeater"
     # la mentira no viajo
     assert dict(f.request.headers)["Content-Length"] == "4"
+
+
+def test_repeater_manda_un_multipart_con_sus_crlf_intactos(objetivo):
+    """De extremo a extremo: una subida reenviada llega byte a byte.
+
+    Era un fallo silencioso: los \\r\\n del cuerpo se volvian \\n y el
+    servidor rechazaba el multipart. Pruebas de subida de archivos, que
+    son de lo mas comun, quedaban rotas sin decir nada.
+    """
+    host, puerto = objetivo
+    cuerpo = ('--X\r\nContent-Disposition: form-data; name="f"; '
+              'filename="a.txt"\r\nContent-Type: text/plain\r\n'
+              "\r\nhola mundo\r\n--X--\r\n")
+    crudo = (f"POST /eco HTTP/1.1\r\nHost: {host}:{puerto}\r\n"
+             "Content-Type: multipart/form-data; boundary=X\r\n\r\n" + cuerpo)
+    f = repeater.send_raw(crudo)
+    assert f.error == "" and f.status == 200
+    # el objetivo devuelve «recibido:» + el cuerpo tal cual
+    assert f.response.body == b"recibido:" + cuerpo.encode()
+    # y el Content-Length cuadra con los bytes reales enviados
+    assert dict(f.request.headers)["Content-Length"] == str(len(cuerpo.encode()))
 
 
 def test_repeater_sin_host_explica_el_problema():

@@ -277,3 +277,12 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   teclado no lo veian. Ahora hay tests que miden que los botones caen
   dentro. Un boton que no se puede pulsar es el mismo fallo que un atajo
   que el pie no muestra: existe y no se alcanza.
+- **2026-11-01** — Auditoria del nucleo: encontrado que `parse_raw`
+  normalizaba `\r\n` a `\n` en el cuerpo. Un multipart reenviado por el
+  repeater o el intruder llegaba con los saltos cambiados y el servidor lo
+  rechazaba. El mismo patron de siempre —corrupcion silenciosa de lo que
+  viaja—, esta vez en la ruta que mas presume de fidelidad: «lo que
+  escribes es lo que viaja». El cuerpo es dato; sus saltos no se tocan. La
+  cabecera sigue parseandose con cualquiera de los dos. Confirmado antes
+  de arreglar que el TextArea de Textual SI conserva los \r\n, asi que el
+  arreglo en el nucleo basta para toda la ruta del editor.
