@@ -20,6 +20,8 @@ from textual.widgets import (
     TabPane,
 )
 
+from ..core import plugins as plug
+from ..core import sesiones
 from ..core.engine import Builtin, mitm, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
@@ -105,6 +107,7 @@ class LuzxferApp(App):
         upstream: str | None = None,
         arrancar_motor: bool = True,
         motor: str = "integrado",
+        cargar_plugins: bool = True,
         filtrar_encoding: bool = True,
         filtrar_cache: bool = True,
     ):
@@ -121,6 +124,13 @@ class LuzxferApp(App):
         self.upstream = upstream
         self.arrancar_motor = arrancar_motor
         self.motor = motor
+        # un plugin es codigo de terceros corriendo con tus
+        # privilegios: se carga, pero se ve que se cargo
+        self.plugins = plug.Registro()
+        self._errores_plugins: list[str] = []
+        if cargar_plugins:
+            self.plugins, self._errores_plugins = plug.cargar(
+                sesiones.dir_datos() / "plugins")
         self.engine: Builtin | None = None
         self._flujo_actual: Flow | None = None
         self._filtro = ""
@@ -189,6 +199,10 @@ class LuzxferApp(App):
         self.alcance, _ = alc.Alcance.desde_texto_tolerante(
             self.store.get_meta("alcance"))
         self.solo_alcance = self.store.get_meta("solo_alcance") == "si"
+
+        for err in self._errores_plugins:
+            self.notify(err, title="plugin con problemas",
+                        severity="error", timeout=12)
 
         if self.arrancar_motor:
             self.arrancar()
@@ -297,8 +311,10 @@ class LuzxferApp(App):
             # ademas no son del cliente.
             nuevos = []
             if not self.solo_analizar_alcance or self.alcance.dentro(flujo.request.url):
-                nuevos = [h for h in detector.analizar(flujo)
-                          if self.store.add_finding(h)]
+                # los plugins SUMAN a los detectores de serie, no los
+                # reemplazan: instalar uno no puede dejarte con menos
+                candidatos = detector.analizar(flujo) + self.plugins.analizar(flujo)
+                nuevos = [h for h in candidatos if self.store.add_finding(h)]
         except sqlite3.Error as e:
             # otra instancia con la sesion tomada, disco lleno, archivo
             # borrado bajo los pies… Perder un flujo es malo; que la
@@ -413,6 +429,10 @@ class LuzxferApp(App):
         if self._escaneo is not None and not self._escaneo.terminado:
             piezas += [(f"barriendo {self._escaneo.enviadas}/"
                         f"{self._escaneo.total}", "#f0a93b"),
+                       ("  ·  ", "#39404f")]
+        if self.plugins.cargados:
+            n = len(self.plugins.cargados)
+            piezas += [(f"{n} plugin{'' if n == 1 else 's'}", "#c99bf0"),
                        ("  ·  ", "#39404f")]
         if self.interceptor.activa:
             # tiene que verse: olvidarse de que esta encendida es
@@ -564,7 +584,8 @@ class LuzxferApp(App):
         try:
             e = dast.Escaneo(
                 crudo, self.alcance,
-                tls=self._flujo_actual.request.url.startswith("https://"))
+                tls=self._flujo_actual.request.url.startswith("https://"),
+                pruebas_extra=self.plugins.pruebas)
         except (dast.FueraDeAlcance, dast.SinPuntos) as err:
             self.notify(str(err), title="no se lanza el barrido",
                         severity="error", timeout=12)

@@ -450,6 +450,42 @@ brotli de verdad. Y si aun así llega un cuerpo en algo ilegible, el panel de
 respuesta lo dice y avisa de que el detector tampoco pudo leerlo, en vez de
 mostrarte binario y callarse.
 
+## Plugins
+
+Un plugin es un `.py` en `~/.local/share/luzxfer/plugins/` que define
+`registrar(api)`:
+
+```python
+NOMBRE = "mi detector"
+
+def registrar(api):
+    api.detector(busca_algo)      # comprobación pasiva
+    api.prueba(Prueba(...))       # comprobación activa del barrido
+
+def busca_algo(flujo):
+    return [Finding(...)]         # o [] si no hay nada
+```
+
+Hay un ejemplo que funciona en [`ejemplos/plugins/jwt_debil.py`](ejemplos/plugins/jwt_debil.py):
+busca tokens JWT con `alg=none` o firmados con HMAC. Cópialo a la carpeta
+de plugins y se carga.
+
+> **Un plugin es código que corre con tus privilegios dentro de la
+> herramienta.** No hay caja de arena y no va a haberla: en Python no sale
+> ni barata ni honesta. Instala solo los que hayas leído, igual que harías
+> con cualquier cosa que metes en tu `~/.bashrc`. `--sin-plugins` los
+> desactiva, y la barra de estado dice siempre cuántos hay cargados.
+
+Lo que sí se hace es contener los accidentes, que es distinto de contener
+a un atacante: un plugin que revienta al cargar no impide que carguen los
+demás, un detector que revienta no te deja sin los otros detectores, y lo
+que un plugin devuelve se valida. **Un ID de la WSTG que no existe se
+descarta**: la matriz alimenta un informe que va a un cliente, y el
+cliente va a buscar ese ID.
+
+Los plugins **suman** a las comprobaciones de serie, nunca las
+reemplazan: instalar uno no puede dejarte con menos de lo que tenías.
+
 ## Motores
 
 El núcleo nunca habla con un proxy directamente. Habla con una interfaz de
@@ -501,7 +537,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] DAST con correa: exige alcance, disparo manual, ritmo limitado
 - [x] Matriz de cobertura WSTG y generación de informes
 - [x] Adaptador de motor mitmproxy
-- [ ] API de plugins
+- [x] API de plugins
 - [ ] Personalización: temas, colores, atajos configurables
 
 `docs/direccion.md` tiene el razonamiento detrás de ese orden, y por qué la

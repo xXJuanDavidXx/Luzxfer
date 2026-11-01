@@ -64,6 +64,13 @@ experiencia de quien ya usaba la herramienta.
   - El extra `[mitm]` trae brotli, así que con él los cuerpos en brotli se
     decodifican y el proxy deja de recortar `br`.
   - La interceptación en vuelo todavía no pasa por este motor.
+- **API de plugins**: un `.py` en `~/.local/share/luzxfer/plugins/` que
+  define `registrar(api)` puede añadir comprobaciones pasivas y pruebas
+  activas del barrido. Con ejemplo funcionando en `ejemplos/plugins/`.
+  - Suman a las de serie, nunca las reemplazan.
+  - Un plugin roto no impide que carguen los demás ni corta el análisis.
+  - Los IDs WSTG inventados se descartan antes de llegar a la matriz.
+  - `--sin-plugins` los desactiva; la barra dice cuántos hay cargados.
 
 ## [0.3.0] — 2026-11-01
 

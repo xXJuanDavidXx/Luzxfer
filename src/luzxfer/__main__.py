@@ -72,6 +72,10 @@ def main(argv: list[str] | None = None) -> int:
                          "defecto se quitan, porque con ellos el servidor "
                          "contesta 304 sin cuerpo y no hay nada que analizar. "
                          "Conservalos para probar envenenamiento de cache")
+    ap.add_argument("--sin-plugins", action="store_true",
+                    help="no cargar los plugins de "
+                         "~/.local/share/luzxfer/plugins/. Un plugin es "
+                         "codigo que corre con tus privilegios")
     ap.add_argument("--no-engine", action="store_true",
                     help="no arrancar el proxy: solo revisar una sesion guardada")
     ap.add_argument("--version", action="store_true")
@@ -122,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         host=a.host, port=a.port, upstream=a.upstream,
         arrancar_motor=not a.no_engine,
         motor=a.motor,
+        cargar_plugins=not a.sin_plugins,
         filtrar_encoding=not a.conservar_encoding,
         filtrar_cache=not a.conservar_cache,
     )

@@ -217,6 +217,8 @@ class Escaneo:
     por_segundo: float = 5.0
     tls: bool | None = None
     timeout: float = 15.0
+    # las que anaden los plugins, sumadas a las de serie
+    pruebas_extra: list = field(default_factory=list)
 
     puntos: list[Punto] = field(default_factory=list, init=False)
     total: int = field(default=0, init=False)
@@ -244,7 +246,11 @@ class Escaneo:
                 "ni cuerpo de formulario."
             )
         self.total = len(self.puntos) * sum(
-            len(p.payloads) for p in PRUEBAS.values())
+            len(p.payloads) for p in self.todas_las_pruebas)
+
+    @property
+    def todas_las_pruebas(self) -> list:
+        return list(PRUEBAS.values()) + list(self.pruebas_extra)
 
     def abortar(self) -> None:
         self._parar = True
@@ -261,7 +267,7 @@ class Escaneo:
 
         tareas = [(p, prueba, payload)
                   for p in self.puntos
-                  for prueba in PRUEBAS.values()
+                  for prueba in self.todas_las_pruebas
                   for payload in prueba.payloads]
 
         def trabajo(tarea):
