@@ -58,7 +58,12 @@ experiencia de quien ya usaba la herramienta.
 ## [No publicado]
 
 ### Añadido
-- Nada todavía.
+- **Motor de mitmproxy** (`--motor mitm`): HTTPS, HTTP/2 y WebSockets. El
+  integrado sigue siendo el de por defecto, porque es el único que corre
+  en Termux.
+  - El extra `[mitm]` trae brotli, así que con él los cuerpos en brotli se
+    decodifican y el proxy deja de recortar `br`.
+  - La interceptación en vuelo todavía no pasa por este motor.
 
 ## [0.3.0] — 2026-11-01
 

@@ -458,12 +458,27 @@ motor, así que cambiar de motor es cambiar una clase.
 | motor | TLS | HTTP/2 | WebSockets | necesita |
 | --- | --- | --- | --- | --- |
 | `integrado` (por defecto) | no | no | no | nada, solo stdlib |
-| `mitmproxy` | sí | sí | sí | `pip install 'luzxfer[mitm]'` |
+| `mitm` | sí | sí | sí | `pip install 'luzxfer[mitm]'` |
+
+```bash
+luzxfer --motor mitm        # HTTPS, HTTP/2 y WebSockets
+```
 
 El motor integrado contesta `CONNECT` con un 501 que explica el motivo, en
 vez de fallar en silencio. Interceptar TLS necesita una CA propia y generar
 certificados por host, que es justo la dependencia pesada que el motor
-integrado evita.
+integrado evita — y por eso **el integrado sigue siendo el de por defecto**:
+la razón de ser de esto frente a Burp es correr donde Burp no corre.
+
+El extra `[mitm]` trae brotli de regalo, así que con él instalado los
+cuerpos en brotli se leen de verdad y el proxy deja de recortar `br` del
+`Accept-Encoding`: lo que se recorta es lo que no se puede leer, no una
+lista fija.
+
+**La interceptación en vuelo (`x`) todavía no pasa por el motor de
+mitmproxy.** Su hook de petición corre en su propio bucle, y bloquearlo
+detendría todos los flujos a la vez; hacerlo bien necesita `flow.intercept()`
+y reanudar desde ese bucle. Queda pendiente, dicho en vez de fingido.
 
 ## Seguridad
 
@@ -485,7 +500,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [ ] Interceptar y editar en vuelo — la brecha real contra Burp hoy
 - [x] DAST con correa: exige alcance, disparo manual, ritmo limitado
 - [x] Matriz de cobertura WSTG y generación de informes
-- [ ] Adaptador de motor mitmproxy
+- [x] Adaptador de motor mitmproxy
 - [ ] API de plugins
 - [ ] Personalización: temas, colores, atajos configurables
 

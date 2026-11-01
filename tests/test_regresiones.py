@@ -14,7 +14,12 @@ import pytest
 from textual.widgets import DataTable, Input, Static
 
 from luzxfer.core.engine import Builtin
-from luzxfer.core.models import Flow, Request, Response
+from luzxfer.core.models import (
+    CODIFICACIONES_LEGIBLES,
+    Flow,
+    Request,
+    Response,
+)
 from luzxfer.core.store import Store
 from luzxfer.core.tools import detector, repeater
 from luzxfer.tui.app import LuzxferApp
@@ -350,6 +355,9 @@ def _ae_que_vio_el_servidor(datos: dict) -> str:
     return next(v for k, v in datos["cabeceras"] if k.lower() == "accept-encoding")
 
 
+SIN_BROTLI = "br" not in CODIFICACIONES_LEGIBLES
+
+
 def test_el_proxy_no_pide_al_servidor_lo_que_no_sabe_deshacer(eco):
     """El fallo de verdad no es el cuerpo ilegible en pantalla: es que el
     detector busca reflejos en los bytes comprimidos y no encuentra NADA.
@@ -359,8 +367,12 @@ def test_el_proxy_no_pide_al_servidor_lo_que_no_sabe_deshacer(eco):
                             b"Accept-Encoding: gzip, deflate, br, zstd\r\n"
                             b"Connection: close\r\n\r\n")
     ae = _ae_que_vio_el_servidor(datos)
-    assert "br" not in ae and "zstd" not in ae
+    assert "zstd" not in ae, "eso no se sabe deshacer en ningun caso"
     assert "gzip" in ae and "deflate" in ae
+    # con el extra [br] instalado SI se sabe deshacer brotli, asi que
+    # recortarlo seria empobrecer la respuesta sin motivo. Lo que se
+    # recorta es lo que no se puede leer, no una lista fija.
+    assert ("br" not in ae) == SIN_BROTLI
 
 
 def test_el_proxy_conserva_el_orden_y_los_q_de_accept_encoding(eco):
@@ -370,12 +382,16 @@ def test_el_proxy_conserva_el_orden_y_los_q_de_accept_encoding(eco):
                             b"Accept-Encoding: gzip;q=0.8, br;q=1.0, deflate;q=0.5\r\n"
                             b"Connection: close\r\n\r\n")
     ae = _ae_que_vio_el_servidor(datos)
-    assert ae == "gzip;q=0.8, deflate;q=0.5"
+    esperado = ("gzip;q=0.8, deflate;q=0.5" if SIN_BROTLI
+                else "gzip;q=0.8, br;q=1.0, deflate;q=0.5")
+    assert ae == esperado
 
 
 def test_si_el_cliente_solo_pide_lo_ilegible_se_manda_identity(eco):
+    ilegible = b"zstd" if not SIN_BROTLI else b"br"
     datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
-                            b"Accept-Encoding: br\r\nConnection: close\r\n\r\n")
+                            b"Accept-Encoding: " + ilegible +
+                            b"\r\nConnection: close\r\n\r\n")
     assert _ae_que_vio_el_servidor(datos) == "identity"
 
 
@@ -560,7 +576,9 @@ async def test_la_app_arranca_el_motor_con_sus_banderas(eco):
     vistas = {k.lower(): v for k, v in datos["cabeceras"]}
     assert "if-none-match" not in vistas, "la app no le paso filtrar_cache al motor"
     assert "if-modified-since" not in vistas
-    assert "br" not in vistas.get("accept-encoding", ""), \
+    # zstd no se sabe deshacer con extra ni sin el, asi que su ausencia
+    # prueba el cableado sin depender de que este instalado brotli
+    assert "zstd" not in vistas.get("accept-encoding", ""), \
         "la app no le paso filtrar_encoding al motor"
 
 

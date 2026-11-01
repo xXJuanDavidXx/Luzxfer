@@ -56,6 +56,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="archivo de sesion en una ruta concreta, en vez de una "
                          "sesion con nombre. Gana sobre -s. Usa ':memory:' para "
                          "una sesion que se pierda al salir")
+    ap.add_argument("--motor", choices=("integrado", "mitm"),
+                    default="integrado",
+                    help="motor del proxy. 'integrado' es solo stdlib y "
+                         "no intercepta HTTPS; 'mitm' da TLS, HTTP/2 y "
+                         "WebSockets y necesita el extra "
+                         "(pip install 'luzxfer[mitm]')")
     ap.add_argument("--conservar-encoding", action="store_true",
                     help="no recortar el Accept-Encoding del cliente. Por "
                          "defecto se le quita lo que luzxfer no sabe deshacer "
@@ -115,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         db=ruta, sesion=nombre,
         host=a.host, port=a.port, upstream=a.upstream,
         arrancar_motor=not a.no_engine,
+        motor=a.motor,
         filtrar_encoding=not a.conservar_encoding,
         filtrar_cache=not a.conservar_cache,
     )

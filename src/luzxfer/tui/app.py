@@ -20,7 +20,7 @@ from textual.widgets import (
     TabPane,
 )
 
-from ..core.engine import Builtin, puerto_libre
+from ..core.engine import Builtin, mitm, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import alcance as alc
@@ -104,6 +104,7 @@ class LuzxferApp(App):
         port: int = 8080,
         upstream: str | None = None,
         arrancar_motor: bool = True,
+        motor: str = "integrado",
         filtrar_encoding: bool = True,
         filtrar_cache: bool = True,
     ):
@@ -119,6 +120,7 @@ class LuzxferApp(App):
         self.port_proxy = port
         self.upstream = upstream
         self.arrancar_motor = arrancar_motor
+        self.motor = motor
         self.engine: Builtin | None = None
         self._flujo_actual: Flow | None = None
         self._filtro = ""
@@ -247,18 +249,34 @@ class LuzxferApp(App):
                 f"el puerto {self.port_proxy} ya esta ocupado",
                 title="no se pudo arrancar el motor", severity="error", timeout=8)
             return
-        self.engine = Builtin(
+        # La promesa del primer commit: cambiar de motor es cambiar una
+        # clase. Aqui es literalmente eso, y nada mas abajo se entera.
+        clase = mitm.Mitm if self.motor == "mitm" else Builtin
+        if clase is mitm.Mitm and not mitm.disponible():
+            self.notify("el motor de mitmproxy no esta instalado: "
+                        "pip install 'luzxfer[mitm]'",
+                        title="no se pudo arrancar el motor",
+                        severity="error", timeout=10)
+            return
+        self.engine = clase(
             self._flujo_desde_hilo,
             host=self.host_proxy, port=self.port_proxy, upstream=self.upstream,
             filtrar_encoding=self.filtrar_encoding,
             filtrar_cache=self.filtrar_cache,
             interceptor=self.interceptor,
         )
-        self.engine.start()
+        try:
+            self.engine.start()
+        except RuntimeError as e:
+            self.notify(str(e), title="no se pudo arrancar el motor",
+                        severity="error", timeout=10)
+            self.engine = None
+            return
         destino = f" → {self.upstream}" if self.upstream else ""
+        info = clase.info()
         self.notify(
             f"escuchando en {self.host_proxy}:{self.port_proxy}{destino}",
-            title="motor integrado", timeout=4)
+            title=f"motor {info.name}", timeout=4)
 
     def _flujo_desde_hilo(self, flujo: Flow) -> None:
         """Llamado DESDE el hilo del motor: hay que saltar al bucle de la TUI."""
