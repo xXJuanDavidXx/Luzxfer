@@ -209,3 +209,19 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   que estaba en el esquema sin usarse desde la primera versión. A partir de
   aquí se versiona: la 0.2.0 sale con la Tarea 11, porque cambia un
   comportamiento por defecto (la 0.1.0 perdía el historial, la 0.2.0 no).
+- **2026-11-01** — Exportación a `curl` (`u`), que era una brecha real
+  contra Burp: no había **ninguna** forma de sacar una petición de la
+  herramienta, y un hallazgo que solo existe dentro de tu pantalla cuesta
+  de defender ante un cliente.
+  **Lo que enseñó este incremento no fue la función, fue el test.** Escribí
+  el exportador con `--data-binary` creyendo que así el cuerpo viajaba
+  intacto. El test que ejecuta el comando de verdad contra el servidor de
+  eco falló enseñando el `/etc/passwd` de esta máquina: `-d` y
+  `--data-binary` interpretan un `@` inicial como «lee este archivo». Es
+  decir, el exportador convertía un cuerpo capturado que empezara por `@`
+  en una fuga de archivos hacia el objetivo. El flag correcto es
+  `--data-raw`.
+  **La regla que queda:** un test que comprueba la *forma* del texto
+  exportado habría pasado con ese fallo dentro. Lo que exporta la
+  herramienta se prueba **ejecutándolo**, no mirándolo. Vale para el curl
+  de hoy y para cualquier otro formato que salga de aquí.

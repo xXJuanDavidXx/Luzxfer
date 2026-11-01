@@ -5,6 +5,36 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Añadido
+- **Exportar (`u`)**: el flujo como comando `curl`, como petición cruda o
+  como respuesta cruda, recorriéndolas con `tab`, y `ctrl+y` al
+  portapapeles. Era una brecha real contra Burp —«Copy as curl command» es
+  de lo que más se usa— y además es lo que permite entregarle a un cliente
+  algo que puede ejecutar él mismo: un hallazgo que solo existe dentro de
+  tu pantalla cuesta de defender.
+  - El `curl` reproduce lo que viajó. Todo va entre comillas aunque no haga
+    falta, porque editar el comando es para lo que se exporta y un `&` en
+    un argumento desnudo lo parte en dos.
+  - Las cabeceras salen todas, `Content-Length` incluida, con un aviso de
+    que hay que ajustarla si editas el cuerpo. Decidir por el analista que
+    una cabecera sobra es como un export deja de ser evidencia.
+  - Un cuerpo que no es texto viaja en base64 y se deshace en la tubería.
+  - El portapapeles no promete haber funcionado: OSC 52 lo ignoran muchos
+    terminales sin decir nada, y por eso el texto está en un editor
+    seleccionable.
+
+### Seguridad
+- El exportador usa **`--data-raw` y no `--data-binary`**. Los dos últimos
+  interpretan un `@` inicial como «lee este archivo del disco y mándalo»:
+  un cuerpo capturado que empezara por `@/etc/passwd` habría convertido el
+  comando exportado en una fuga de archivos de la máquina de quien lo
+  pegara, hacia el objetivo. Lo encontró el test que ejecuta el comando de
+  verdad contra el servidor de eco, mientras el código aún usaba
+  `--data-binary`: el eco recibió el `/etc/passwd` de esta máquina. El test
+  se queda como garantía, y se ha comprobado que falla si se revierte.
+
 ## [0.4.0] — 2026-11-01
 
 ### Añadido

@@ -33,6 +33,7 @@ from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.cobertura import CoberturaScreen
 from .screens.codec import ConversorScreen
 from .screens.comparar import CompararScreen
+from .screens.exportar import ExportarScreen
 from .screens.intercepta import InterceptaScreen
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
@@ -102,6 +103,7 @@ class LuzxferApp(App):
         Binding("slash", "buscar", "buscar en todo", id="buscar"),
         Binding("d", "conversor", "conversor", id="conversor"),
         Binding("y", "comparar", "comparar marcados", id="comparar"),
+        Binding("u", "exportar", "exportar", id="exportar"),
         Binding("m", "marcar", "marcar", id="marcar"),
         Binding("n", "nota", "nota", id="nota"),
         Binding("v", "confirmar", "confirmar", id="confirmar"),
@@ -699,6 +701,12 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         self.actualizar_estado()
         return errores
+
+    def action_exportar(self) -> None:
+        if self._flujo_actual is None:
+            self.notify("selecciona un flujo primero", severity="warning")
+            return
+        self.push_screen(ExportarScreen(self._flujo_actual))
 
     def action_comparar(self) -> None:
         """Compara los dos flujos marcados.

@@ -106,6 +106,7 @@ ignorado.
 | `n` | escribir una nota en el flujo |
 | `m` | marcar un flujo |
 | `y` | comparar los dos flujos marcados |
+| `u` | exportar: `curl`, petición cruda, respuesta cruda |
 | `v` | confirmar el candidato seleccionado como hallazgo |
 | `a` | alcance: qué entra en el contrato |
 | `e` | mapa del sitio |
@@ -121,6 +122,37 @@ ignorado.
 en dos columnas en vez de dos pestañas, como Burp deja distribuirlas. La
 pestaña de candidatos sigue alcanzable en los dos modos, y la elección se
 recuerda con la sesión.
+
+### Exportar
+
+`u` saca el flujo de la herramienta en tres formas —`curl`, petición cruda y
+respuesta cruda— que se recorren con `tab`. `ctrl+y` lo manda al
+portapapeles; el texto está en un editor seleccionable porque el
+portapapeles viaja por una secuencia de escape que muchos terminales
+ignoran, y prometer que funcionó sería la manera de acabar pegando una
+cadena vieja en un informe.
+
+El `curl` reproduce lo que viajó, no algo parecido. De ahí tres decisiones
+que parecen quisquillosas:
+
+- **Todo va entre comillas**, aunque no haga falta. Editar el cuerpo del
+  comando es justo para lo que se exporta, y un `&otro=1` añadido a mano a
+  un argumento desnudo parte el comando en dos y manda el proceso al fondo.
+- **`--data-raw`, nunca `-d` ni `--data-binary`.** Esto no es estilo: `-d` y
+  `--data-binary` interpretan un `@` inicial como «lee este archivo del
+  disco y mándalo». Un cuerpo capturado que empiece por `@/etc/passwd`
+  convertiría el comando exportado en una fuga de archivos de la máquina de
+  quien lo pegue. Hay un test que ejecuta el comando de verdad para
+  comprobarlo — **y encontró este fallo** cuando el código usaba
+  `--data-binary`.
+- **Las cabeceras salen todas, `Content-Length` incluida.** curl calcularía
+  la suya, pero quitarla haría que el comando mandase algo distinto de lo
+  capturado. Si editas el cuerpo, ajústala o bórrala: sale un aviso
+  recordándotelo.
+
+Un cuerpo que no es texto —con un NUL, o que no decodifica— viaja en base64
+y se deshace en la tubería con `base64 -d`. El comando queda más largo, pero
+manda los mismos bytes, que es el único criterio que cuenta.
 
 ### Comparar
 
