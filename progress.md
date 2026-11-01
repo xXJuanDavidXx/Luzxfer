@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Bitácora de avance de **luzxfer 0.5.0**. Última verificación: **2026-11-01**.
+Bitácora de avance de **luzxfer 0.6.0**. Última verificación: **2026-11-01**.
 
 Este archivo dice en qué punto está la herramienta de verdad: qué está hecho y
 comprobado, qué está a medias, y qué falta. No repite el README (qué es la
@@ -15,9 +15,9 @@ Todo esto se corrió en esta máquina, no es recuerdo de la última sesión:
 
 | comprobación | resultado |
 | --- | --- |
-| `./venv/bin/python -m pytest` | **479 pasan**, 1 saltado, ~2 min |
+| `./venv/bin/python -m pytest` | **550 pasan**, 1 saltado, ~2,5 min |
 | `./venv/bin/ruff check src tests` | **limpio**, `All checks passed!` |
-| `luzxfer --version` | `luzxfer 0.5.0` |
+| `luzxfer --version` | `luzxfer 0.6.0` |
 | sesiones, de punta a punta | 7 flujos, salir, volver sin argumentos, 7 flujos |
 | brotli, contra Juice Shop real | `br` ilegible → `gzip` legible al filtrar |
 | vista combinada | izquierda x=2 ancho 66, derecha x=72 ancho 66 |
@@ -26,6 +26,18 @@ Todo esto se corrió en esta máquina, no es recuerdo de la última sesión:
 sistema tiene pytest pero no textual, y el venv tiene las dos cosas.
 
 ---
+
+## Comparación con Burp (2026-11-01)
+
+Con el roadmap propio terminado, la pregunta pasó a ser qué tiene Burp
+que esto no. De ahí salieron tres huecos reales, dos ya cerrados:
+
+| Burp | aquí |
+| --- | --- |
+| búsqueda en el historial | `/` — y **descomprime**, porque un `LIKE` de SQL no ve dentro de un gzip |
+| Decoder | `d` — y enseña qué *podría* ser el texto en vez de pedir el formato a ciegas |
+| Comparer | `y` — sobre los dos flujos marcados |
+| Sequencer | **no**, y a propósito: una medida de entropía mal hecha da falsa confianza, que en una herramienta de seguridad es peor que no tenerla |
 
 ## Prueba de conjunto (2026-11-01)
 
