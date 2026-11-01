@@ -193,6 +193,10 @@ class LuzxferApp(App):
         self.interceptor = intercepta.Interceptor(self._detenida_desde_hilo)
         self._escaneo: dast.Escaneo | None = None
         self._barrido_avisado = False
+        # cuantos flujos perdidos se han avisado ya: el contador de la
+        # barra se queda, pero el aviso con el motivo no puede repetirse
+        # en cada refresco o tapa la pantalla
+        self._perdidos_avisados = 0
 
     # ------------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -558,6 +562,23 @@ class LuzxferApp(App):
             n = len(self.interceptor.pendientes())
             piezas += [(f"INTERCEPTA{f' ({n})' if n else ''}", f"bold {P.peligro}"),
                        ("  ·  ", P.separador)]
+        # Trafico que el proxy capturo y que no llego al almacen. Tiene
+        # que verse SIEMPRE y en rojo: un historial al que le faltan
+        # flujos sin decirlo lleva a concluir que el objetivo no habla,
+        # que es un falso negativo fabricado por la herramienta.
+        perdidos = self.engine.perdidos if self.engine else 0
+        if perdidos:
+            piezas += [(f"{perdidos} PERDIDO{'' if perdidos == 1 else 'S'}",
+                        f"bold {P.peligro}"), ("  ·  ", P.separador)]
+            # el contador dice cuantos; el motivo hace falta para saber si
+            # fue el disco, el almacen o un cierre a medias
+            if perdidos > self._perdidos_avisados:
+                self._perdidos_avisados = perdidos
+                self.notify(
+                    f"{perdidos} flujo(s) capturados no llegaron al "
+                    f"historial: {self.engine.ultimo_fallo}",
+                    title="trafico perdido", severity="error", timeout=10)
+
         piezas.append(
             (motor, P.bien if self.engine and self.engine.running else P.peligro))
         self.query_one("#estado", Static).update(Text.assemble(*piezas))

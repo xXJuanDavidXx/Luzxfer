@@ -251,12 +251,6 @@ class Builtin(Engine):
 
         return None, path, path
 
-    def _emitir(self, flujo: Flow) -> None:
-        try:
-            self.on_flow(flujo)
-        except Exception:
-            pass          # un fallo del consumidor nunca tumba el proxy
-
     # ------------------------------------------------------------------
     def start(self) -> None:
         if self._running:

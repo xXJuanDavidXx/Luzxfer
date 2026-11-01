@@ -226,3 +226,17 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   se desincroniza en el primer cambio y manda a probar teclas muertas.
   **La lección, que es la misma de siempre:** lo que la interfaz no pueda
   mostrar tiene que decirlo, nunca descartarlo callando.
+- **2026-11-01** — Auditoría del núcleo buscando el patrón que ha producido
+  todos los fallos de este proyecto: el error silencioso. Aparecido en el
+  sitio más caro posible, la entrega de flujos del motor al núcleo, donde
+  los dos motores hacían `except Exception: pass`.
+  **El equilibrio que había que encontrar:** el código viejo acertaba en que
+  el proxy no puede caerse por un consumidor roto, y se equivocaba en lo que
+  cobraba por ello. No son opciones excluyentes: se sobrevive al fallo *y*
+  se cuenta. Ahora hay contador con cerrojo, motivo del último, `N PERDIDOS`
+  en rojo en la barra y un aviso la primera vez.
+  **La regla, ya por tercera vez:** lo que la herramienta no pueda hacer
+  tiene que decirlo. Un detector que no lee un cuerpo, un pie que no pinta
+  un atajo y un motor que no entrega un flujo son el mismo fallo —callar—
+  y los tres producen la misma consecuencia: el analista concluye que no
+  hay nada donde sí lo había.

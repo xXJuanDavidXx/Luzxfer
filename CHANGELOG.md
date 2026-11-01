@@ -41,6 +41,29 @@ experiencia de quien ya usaba la herramienta.
     Hay un test que falla si alguien añade una tecla y no la coloca.
 - `ayuda` es una acción configurable más, como el resto.
 - `esc` (devolver el foco al historial) está documentado por primera vez.
+## [Sin publicar]
+
+### Corregido
+- **Los dos motores descartaban en silencio los flujos que no lograban
+  entregar al núcleo.** El `except Exception: pass` protegía lo correcto
+  —que un consumidor roto no tumbe el proxy, porque entonces el navegador
+  del analista deja de cargar a mitad de una prueba— pero pagaba el precio
+  equivocado: con el almacén bloqueado o el disco lleno, el tráfico
+  desaparecía, el historial se quedaba vacío y la conclusión natural era
+  que el objetivo no habla. Un falso negativo fabricado por la herramienta,
+  que es la peor clase porque no deja rastro.
+  - Ahora se cuentan y se guarda el motivo del último. La barra de estado
+    muestra `N PERDIDOS` en rojo mientras haya alguno, y la primera vez
+    salta un aviso con el error exacto.
+  - El proxy sigue sin caerse, que era lo que el código viejo hacía bien.
+  - La cuenta usa un cerrojo: los dos motores entregan desde hilos
+    distintos, y un contador de evidencia perdida que se queda corto bajo
+    concurrencia subestima justo lo que hay que no subestimar.
+
+### Cambiado
+- `_emitir` vive una sola vez, en la clase `Engine`. Estaba duplicado en
+  los dos motores, que es como una corrección se queda a medias sin que
+  nadie lo note. Hay un test que falla si un motor vuelve a traerse el suyo.
 
 ## [0.4.0] — 2026-11-01
 
