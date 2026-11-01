@@ -50,8 +50,8 @@ dev = [
 luzxfer = "luzxfer.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/xXJuanDavidXx/luzxfer"
-Issues = "https://github.com/xXJuanDavidXx/luzxfer/issues"
+Homepage = "https://github.com/xXJuanDavidXx/Luzxfer"
+Issues = "https://github.com/xXJuanDavidXx/Luzxfer/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/luzxfer"]

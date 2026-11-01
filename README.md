@@ -31,7 +31,7 @@ three gaps:
 Not on PyPI yet. From source:
 
 ```bash
-git clone https://github.com/xXJuanDavidXx/luzxfer
+git clone https://github.com/xXJuanDavidXx/Luzxfer
 cd luzxfer
 pip install -e .
 ```
