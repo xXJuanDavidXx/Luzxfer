@@ -451,6 +451,9 @@ Button.-primary:hover {
 
 #det-peticion { height: 1fr; border: round $lx-borde; }
 
+#det-barra { height: 3; margin-top: 1; align: left middle; }
+#det-barra Button { margin-right: 2; }
+
 /* cargar payloads en el intruder */
 #pay-caja {
     width: 80;
