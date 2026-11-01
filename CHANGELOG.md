@@ -57,6 +57,15 @@ experiencia de quien ya usaba la herramienta.
 
 ## [No publicado]
 
+### Corregido
+- **El coste por flujo volvía a crecer con el historial.** `move_cursor`
+  al seguir el tráfico costaba el 94 % del tiempo de ingerir un flujo y
+  en proporción al tamaño de la tabla: 325/s con 500 flujos, 225/s con
+  2500. Los saltos se agrupan por ciclo de refresco: **~2100/s, plano**.
+- Un detector de plugin que reventaba se anotaba y **no lo veía nadie**.
+- Un `RowHighlighted` rezagado consultaba el `Store` ya cerrado y
+  reventaba al salir de la herramienta.
+
 ### Añadido
 - **Motor de mitmproxy** (`--motor mitm`): HTTPS, HTTP/2 y WebSockets. El
   integrado sigue siendo el de por defecto, porque es el único que corre

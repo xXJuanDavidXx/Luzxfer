@@ -609,3 +609,79 @@ async def test_la_app_respeta_que_le_pidan_no_filtrar(eco):
     vistas = {k.lower(): v for k, v in datos["cabeceras"]}
     assert "if-none-match" in vistas
     assert "br" in vistas.get("accept-encoding", "")
+
+
+# ----------------------- 9. eventos que llegan con la sesion ya cerrada
+async def test_un_evento_tardio_no_revienta_al_salir(tmp_path):
+    """Encontrado auditando. on_unmount cierra el Store, pero un
+    RowHighlighted que llegue despues sigue consultandolo: sqlite3
+    lanza «Cannot operate on a closed database» y el usuario ve un
+    traceback justo al salir, que es el peor momento para verlo."""
+    app = LuzxferApp(db=str(tmp_path / "s.db"), arrancar_motor=False)
+    async with app.run_test() as pilot:
+        app._ingresar(_f(1))
+        await pilot.pause()
+        tabla = app.query_one("#flujos", DataTable)
+        tabla.move_cursor(row=0)
+        await pilot.pause()
+        # el evento se arma aqui, con los widgets todavia vivos
+        ev = DataTable.RowHighlighted(
+            tabla, 0, tabla.coordinate_to_cell_key((0, 0)).row_key)
+
+    # al salir del contexto on_unmount ya cerro la sesion
+    app.on_data_table_row_highlighted(ev)       # no debe lanzar
+
+
+async def test_el_coste_por_flujo_no_crece_con_el_historial():
+    """Regresion de rendimiento, la segunda de este tipo.
+
+    En la 0.1.0 el problema era reconstruir la tabla entera; se arreglo
+    haciendo la insercion incremental. Pero «seguir el trafico» movia el
+    cursor en CADA flujo, y move_cursor cuesta en proporcion al tamanio
+    de la tabla: medido, 94 % del tiempo total y creciendo. Con 2000
+    flujos ya solo se ingerian 225/s frente a 325/s con 500.
+
+    Agrupar los saltos no cambia lo que se ve: a trescientos flujos por
+    segundo nadie distingue veinte saltos de trescientos.
+    """
+    import time as _t
+
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        tabla = app.query_one("#flujos", DataTable)
+
+        def lote(n):
+            ini = _t.perf_counter()
+            for _ in range(n):
+                app._ingresar(_f(0))
+            return _t.perf_counter() - ini
+
+        primero = lote(400)
+        for _ in range(3):
+            lote(400)
+        ultimo = lote(400)
+        await pilot.pause()
+
+        assert tabla.row_count == 2000
+        # con el fallo, el ultimo lote tardaba del orden del triple
+        assert ultimo < primero * 2.0, (
+            f"el coste por flujo crece con el historial: "
+            f"primer lote {primero:.2f}s, ultimo {ultimo:.2f}s")
+
+
+async def test_sigue_al_final_aunque_los_saltos_se_agrupen():
+    """Agrupar no puede romper el seguimiento: un flujo suelto tiene que
+    mover el cursor al momento, como siempre."""
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        for i in range(3):
+            app._ingresar(_f(i))
+        await pilot.pause()
+        tabla = app.query_one("#flujos", DataTable)
+        tabla.move_cursor(row=tabla.row_count - 1)
+        await pilot.pause()
+
+        app._ingresar(_f(99))
+        await pilot.pause()
+        assert tabla.cursor_row == tabla.row_count - 1

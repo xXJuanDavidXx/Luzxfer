@@ -302,3 +302,70 @@ def test_el_plugin_de_ejemplo_carga_y_funciona(tmp_path):
                                        ("Authorization", "Bearer no-es-un-jwt")]),
               response=Response(status=200))
     assert reg.analizar(f3) == []
+
+
+# ------------------------- auditoria: los fallos se anotaban y no se veian
+EXPLOTA = '''
+NOMBRE = "el que revienta"
+
+def registrar(api):
+    api.detector(boom)
+
+def boom(flujo):
+    raise RuntimeError("revienta siempre")
+'''
+
+
+async def test_un_detector_de_plugin_que_falla_se_avisa(tmp_path, monkeypatch):
+    """Encontrado auditando: Registro.fallos se escribia y no lo leia
+    nadie fuera de un test. Un plugin que revienta en cada flujo quedaba
+    anotado y el analista no se enteraba nunca — el mismo fallo
+    silencioso de brotli y de los 304, otra vez."""
+    from luzxfer.tui.app import LuzxferApp
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _escribir(tmp_path / "luzxfer" / "plugins", "explota.py", EXPLOTA)
+
+    app = LuzxferApp(arrancar_motor=False)
+    avisos = []
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.notify = lambda m, **kw: avisos.append(str(m))
+        app._ingresar(_flujo())
+        await pilot.pause()
+        assert any("revienta" in a for a in avisos), \
+            "el fallo del plugin tiene que llegar al analista"
+
+
+async def test_el_mismo_fallo_no_se_repite_en_cada_flujo(tmp_path, monkeypatch):
+    """Avisar una vez es informar; avisar en cada peticion es inutilizar
+    la pantalla con notificaciones."""
+    from luzxfer.tui.app import LuzxferApp
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _escribir(tmp_path / "luzxfer" / "plugins", "explota.py", EXPLOTA)
+
+    app = LuzxferApp(arrancar_motor=False)
+    avisos = []
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.notify = lambda m, **kw: avisos.append(str(m))
+        for _ in range(5):
+            app._ingresar(_flujo())
+        await pilot.pause()
+        assert len([a for a in avisos if "revienta" in a]) == 1
+
+
+async def test_la_barra_marca_que_un_plugin_esta_fallando(tmp_path, monkeypatch):
+    from textual.widgets import Static
+
+    from luzxfer.tui.app import LuzxferApp
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    _escribir(tmp_path / "luzxfer" / "plugins", "explota.py", EXPLOTA)
+
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        barra = app.query_one("#estado", Static).render().plain
+        assert "fallo" not in barra.lower(), "todavia no ha fallado nada"
+        app._ingresar(_flujo())
+        await pilot.pause()
+        assert "fallo" in app.query_one("#estado", Static).render().plain.lower()

@@ -146,6 +146,45 @@ resultaron ser 304 de caché y no redirecciones. Queda:
    (binario)` y ofrecer un volcado hexadecimal, en vez de llenar el panel.
    Mismo principio que el aviso de brotli: si no se puede leer, decirlo.
 
+## Auditoría del 2026-11-01
+
+Pasada sobre el conjunto, con el núcleo ya completo. Tres hallazgos
+reales y una decisión de no hacer algo.
+
+1. **El coste por flujo crecía con el historial, otra vez.** Medido: 325
+   flujos/s con 500 en la tabla, 225/s con 2500. La causa no eran los
+   `COUNT(*)` —cuestan 0,03 ms— sino `move_cursor`, que cuesta en
+   proporción al tamaño de la tabla: **el 94 % del tiempo de ingerir un
+   flujo**. Los saltos se agrupan ahora por ciclo de refresco. Resultado:
+   **~2100 flujos/s, plano hasta 6500 de historial**.
+2. **Un detector de plugin que reventaba se anotaba y no lo leía nadie.**
+   `Registro.fallos` solo se tocaba en un test. El mismo fallo silencioso
+   de brotli y de los 304. Ahora se avisa una vez por fallo distinto y la
+   barra lo marca.
+3. **Un evento rezagado reventaba al salir.** `on_unmount` cierra el
+   `Store`, pero un `RowHighlighted` que llegue después seguía
+   consultándolo: `sqlite3` lanzaba «Cannot operate on a closed database»
+   y el usuario veía un traceback justo al cerrar.
+
+**Lo que decidí NO hacer: dividir `app.py`** (780 líneas, el archivo más
+grande con diferencia). Un *mixin* por subsistema no reduciría el
+acoplamiento —todos seguirían llamando a `self.query_one`, `self.store` y
+`self.notify`—, solo lo repartiría entre más archivos y haría más difícil
+saber dónde vive cada método. En Textual la App *es* el coordinador y ese
+acoplamiento es inherente. Partirlo sería cosmético.
+
+Dos detalles del método, por si sirven de lección:
+
+- La primera versión del arreglo de rendimiento usaba un umbral de 50 ms
+  de reloj. Funcionaba y **rompía un test de la 0.1.0 de forma
+  intermitente**: un comportamiento que depende de lo rápido que vaya la
+  máquina es un fallo esperando. Se cambió por agrupar un salto por ciclo
+  de refresco, que agrupa igual y siempre hace lo mismo.
+- Añadir filas a un `DataTable` dispara `RowHighlighted`. Recalcular ahí
+  «¿estoy siguiendo el tráfico?» lo apagaba a mitad de ráfaga, que es
+  cuando más falta hace. La decisión se toma al encolar el salto, no al
+  ejecutarlo.
+
 ## Deuda conocida que sigue abierta
 
 1. **Cambiar de sesión en caliente no está implementado.** Elegir otra en el

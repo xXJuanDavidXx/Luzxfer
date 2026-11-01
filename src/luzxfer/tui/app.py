@@ -128,6 +128,9 @@ class LuzxferApp(App):
         # privilegios: se carga, pero se ve que se cargo
         self.plugins = plug.Registro()
         self._errores_plugins: list[str] = []
+        self._fallos_avisados = 0
+        self._siguiendo = True
+        self._pendiente_final = False
         if cargar_plugins:
             self.plugins, self._errores_plugins = plug.cargar(
                 sesiones.dir_datos() / "plugins")
@@ -315,6 +318,7 @@ class LuzxferApp(App):
                 # reemplazan: instalar uno no puede dejarte con menos
                 candidatos = detector.analizar(flujo) + self.plugins.analizar(flujo)
                 nuevos = [h for h in candidatos if self.store.add_finding(h)]
+                self._avisar_fallos_de_plugins()
         except sqlite3.Error as e:
             # otra instancia con la sesion tomada, disco lleno, archivo
             # borrado bajo los pies… Perder un flujo es malo; que la
@@ -326,15 +330,60 @@ class LuzxferApp(App):
 
         tabla = self.query_one("#flujos", DataTable)
         if self._coincide(flujo):
-            al_final = tabla.row_count == 0 or tabla.cursor_row >= tabla.row_count - 1
             self._agregar_fila(tabla, flujo)
-            if al_final:                        # seguir el trafico solo si ya lo seguias
-                tabla.move_cursor(row=tabla.row_count - 1)
+            if self._siguiendo:
+                self._seguir_al_final(tabla)
 
         hall = self.query_one("#hallazgos", DataTable)
         for h in nuevos:
             self._agregar_hallazgo(hall, h)
         self.actualizar_estado()
+
+    def _seguir_al_final(self, tabla: DataTable) -> None:
+        """Lleva el cursor al ultimo flujo, agrupando los saltos.
+
+        move_cursor cuesta en proporcion al tamanio de la tabla —medido,
+        el 94 % del tiempo de ingerir un flujo con 2000 dentro—, asi que
+        hacerlo en cada peticion hace que el coste por flujo crezca con
+        el historial. A trescientos flujos por segundo nadie distingue
+        veinte saltos de trescientos.
+
+        Se agrupa por ciclo de refresco y no por reloj. Con un umbral
+        de milisegundos el comportamiento depende de lo rapido que vaya
+        la maquina, y eso en los tests es un fallo intermitente: la
+        primera version de esto rompia un test de la 0.1.0 una de cada
+        tantas veces. Encolar un solo salto hasta el siguiente refresco
+        agrupa igual de bien y siempre hace lo mismo.
+        """
+        if self._pendiente_final:
+            return                      # ya hay un salto encolado
+        self._pendiente_final = True
+        self.call_after_refresh(self._saltar_si_quedo_pendiente)
+
+    def _saltar_si_quedo_pendiente(self) -> None:
+        """El salto final de una rafaga, para no quedarse a medio camino."""
+        # no se vuelve a mirar _siguiendo: la decision se tomo al
+        # encolar. Durante una rafaga el cursor va por detras, asi que
+        # preguntarlo aqui siempre diria que no.
+        if not self._pendiente_final:
+            return
+        self._pendiente_final = False
+        tabla = self.query_one("#flujos", DataTable)
+        if tabla.row_count:
+            tabla.move_cursor(row=tabla.row_count - 1)
+
+    def _avisar_fallos_de_plugins(self) -> None:
+        """Un detector de plugin que revienta tiene que verse.
+
+        Registro.analizar los anota y deduplica; aqui solo se cuentan
+        los que todavia no se han dicho. Avisar una vez es informar;
+        avisar en cada peticion es inutilizar la pantalla.
+        """
+        nuevos = self.plugins.fallos[self._fallos_avisados:]
+        self._fallos_avisados = len(self.plugins.fallos)
+        for f in nuevos:
+            self.notify(f, title="un detector de plugin fallo",
+                        severity="error", timeout=12)
 
     def _coincide(self, f: Flow) -> bool:
         if self.solo_alcance and not self.alcance.dentro(f.request.url):
@@ -432,7 +481,11 @@ class LuzxferApp(App):
                        ("  ·  ", "#39404f")]
         if self.plugins.cargados:
             n = len(self.plugins.cargados)
-            piezas += [(f"{n} plugin{'' if n == 1 else 's'}", "#c99bf0"),
+            rotos = len(self.plugins.fallos)
+            etiqueta = f"{n} plugin{'' if n == 1 else 's'}"
+            if rotos:
+                etiqueta += f" ({rotos} con fallos)"
+            piezas += [(etiqueta, "#e05c5c" if rotos else "#c99bf0"),
                        ("  ·  ", "#39404f")]
         if self.interceptor.activa:
             # tiene que verse: olvidarse de que esta encendida es
@@ -448,12 +501,25 @@ class LuzxferApp(App):
     def on_data_table_row_highlighted(self, ev: DataTable.RowHighlighted) -> None:
         if ev.data_table.id != "flujos" or ev.row_key is None:
             return
+        tabla = ev.data_table
+        # Con un salto encolado el cursor va por detras a proposito, y
+        # anadir filas tambien dispara este evento: recalcular aqui
+        # apagaba el seguimiento a mitad de rafaga, que es justo cuando
+        # mas falta hace.
+        if not self._pendiente_final:
+            self._siguiendo = tabla.cursor_row >= tabla.row_count - 1
         try:
             fid = int(ev.row_key.value)
         except (TypeError, ValueError):
             return
         self._barrido_avisado = False     # otro flujo, otra confirmacion
-        flujo = self.store.get_flow(fid)
+        try:
+            flujo = self.store.get_flow(fid)
+        except sqlite3.Error:
+            # un evento rezagado despues de que on_unmount cerrara la
+            # sesion. Al salir de la aplicacion es el peor momento para
+            # enseñar un traceback, y ya no hay nada que pintar.
+            return
         if flujo:
             self._flujo_actual = flujo
             self._pintar_detalle(flujo)
