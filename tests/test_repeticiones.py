@@ -66,11 +66,11 @@ async def _abrir(app, pilot, flujo=None):
     await pilot.pause()
     app.query_one("#flujos", DataTable).move_cursor(row=0)
     await pilot.pause()
-    await pilot.press("r")
+    await pilot.press("R")
     await pilot.pause()
 
 
-async def test_la_tecla_r_abre_una_pestaña_con_la_peticion():
+async def test_la_tecla_R_abre_una_pestaña_con_la_peticion():
 
     from luzxfer.tui.app import LuzxferApp
     from luzxfer.tui.screens.repeater import RepeaterScreen

@@ -60,6 +60,38 @@ def embellecer_json(texto: str, indent: int = 2) -> str | None:
         return None
 
 
+def formatear_cuerpo_crudo(crudo: str) -> tuple[str, str]:
+    """Reorganiza el cuerpo JSON de una peticion cruda. Devuelve (nuevo, nota).
+
+    Pensado para el editor del repeater: leer un cuerpo JSON todo en una
+    linea es incomodo justo cuando estas buscando donde meter un payload.
+
+    Solo toca el cuerpo, nunca las cabeceras ni la linea de peticion, y
+    solo si el Content-Type dice JSON y el cuerpo es JSON valido. En
+    cualquier otro caso devuelve el texto igual con una nota que explica
+    por que no se toco: vaciar o estropear el editor seria peor que no
+    hacer nada. El Content-Length no se toca aqui porque `send_raw` lo
+    recalcula al enviar.
+    """
+    sep = "\r\n\r\n" if "\r\n\r\n" in crudo else "\n\n"
+    cabeza, delim, cuerpo = crudo.partition(sep)
+    if not delim or not cuerpo.strip():
+        return crudo, "no hay cuerpo que formatear"
+
+    ctype = ""
+    for linea in cabeza.splitlines():
+        if linea.lower().startswith("content-type:"):
+            ctype = linea.split(":", 1)[1].strip()
+            break
+    if not es_json(ctype):
+        return crudo, "el cuerpo no se declara JSON; no se toca"
+
+    bonito = embellecer_json(cuerpo)
+    if bonito is None:
+        return crudo, "el cuerpo dice ser JSON y no es JSON valido; no se toca"
+    return cabeza + delim + bonito, "cuerpo JSON reorganizado"
+
+
 def es_binario(ctype: str, datos: bytes) -> bool:
     """Si el cuerpo no es texto que tenga sentido volcar en pantalla."""
     c = (ctype or "").lower()

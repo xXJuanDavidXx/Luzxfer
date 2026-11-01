@@ -225,3 +225,42 @@ def test_un_charset_inventado_no_revienta():
 def test_sin_charset_declarado_se_asume_utf8():
     texto, _ = cuerpo.presentar("ñandú".encode(), "text/html", bonito=True)
     assert texto == "ñandú"
+
+
+# ------------------------------------------- formatear_cuerpo_crudo
+def test_formatea_el_cuerpo_json_y_deja_las_cabeceras():
+    crudo = ('POST /x HTTP/1.1\r\nHost: o.com\r\n'
+             'Content-Type: application/json\r\n\r\n{"a":1,"b":2}')
+    nuevo, nota = cuerpo.formatear_cuerpo_crudo(crudo)
+    assert '"a": 1' in nuevo and '"b": 2' in nuevo
+    assert nuevo.startswith("POST /x HTTP/1.1")
+    assert "Content-Type: application/json" in nuevo
+    assert nota
+
+
+def test_json_invalido_no_toca_nada():
+    crudo = ('POST /x HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{roto')
+    nuevo, nota = cuerpo.formatear_cuerpo_crudo(crudo)
+    assert nuevo == crudo
+    assert "no es json" in nota.lower()
+
+
+def test_sin_cuerpo_no_hace_nada():
+    crudo = 'GET /x HTTP/1.1\r\nHost: o.com\r\n\r\n'
+    nuevo, nota = cuerpo.formatear_cuerpo_crudo(crudo)
+    assert nuevo == crudo
+
+
+def test_content_type_no_json_no_toca_nada():
+    crudo = 'POST /x HTTP/1.1\r\nContent-Type: text/plain\r\n\r\n{"a":1}'
+    nuevo, nota = cuerpo.formatear_cuerpo_crudo(crudo)
+    assert nuevo == crudo
+    assert nota
+
+
+def test_un_cuerpo_ya_formateado_no_estorba():
+    crudo = ('POST /x HTTP/1.1\r\nContent-Type: application/json\r\n\r\n'
+             '{\n  "a": 1\n}')
+    nuevo, _ = cuerpo.formatear_cuerpo_crudo(crudo)
+    # vuelve a salir formateado, no roto
+    assert '"a": 1' in nuevo

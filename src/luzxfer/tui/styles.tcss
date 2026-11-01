@@ -136,6 +136,13 @@ RepeaterScreen {
     padding: 1 2;
 }
 
+/* Sin acotar las pestañas, el TabbedContent crece con su contenido y
+   empuja la barra de botones FUERA de la caja: se dibujaban una fila por
+   debajo del borde, asi que no habia forma de pulsarlos con el raton. */
+#rep-tabs {
+    height: 1fr;
+}
+
 #rep-titulo {
     color: $lx-acento;
     text-style: bold;

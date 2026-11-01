@@ -141,7 +141,7 @@ async def test_tecla_f_enfoca_el_filtro():
         assert app.focused is app.query_one("#filtro", Input)
 
 
-async def test_repeater_se_abre_con_la_peticion_cargada():
+async def test_R_abre_el_repeater_con_la_peticion_cargada():
     app = app_prueba()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -150,7 +150,7 @@ async def test_repeater_se_abre_con_la_peticion_cargada():
         app.query_one("#flujos", DataTable).move_cursor(row=0)
         await pilot.pause()
 
-        await pilot.press("r")
+        await pilot.press("R")
         await pilot.pause()
 
         editor = app.screen.editor_actual()
@@ -158,12 +158,12 @@ async def test_repeater_se_abre_con_la_peticion_cargada():
         assert "Host: ej.com" in editor.text
 
 
-async def test_repeater_sin_seleccion_avisa_y_no_abre():
+async def test_R_sin_seleccion_avisa_y_no_abre():
     app = app_prueba()
     async with app.run_test() as pilot:
         await pilot.pause()
         pantalla_antes = app.screen
-        await pilot.press("r")
+        await pilot.press("R")
         await pilot.pause()
         assert app.screen is pantalla_antes     # no se abrio nada
 
@@ -225,7 +225,7 @@ async def test_repeater_envia_de_verdad_y_muestra_la_respuesta():
             await pilot.pause()
             app.query_one("#flujos", DataTable).move_cursor(row=0)
             await pilot.pause()
-            await pilot.press("r")
+            await pilot.press("R")
             await pilot.pause()
 
             from textual.widgets import Button
