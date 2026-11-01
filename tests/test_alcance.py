@@ -246,3 +246,115 @@ async def test_una_regla_mal_escrita_avisa_y_conserva_las_buenas():
         await pilot.pause()
         assert len(errores) == 1
         assert len(app.alcance.reglas) == 2
+
+
+# ----------------------------------------------- la pantalla (tecla a)
+async def _abrir_alcance(app, pilot, url="http://objetivo.com/x"):
+    from textual.widgets import DataTable
+    app._ingresar(_flujo(url))
+    await pilot.pause()
+    app.query_one("#flujos", DataTable).move_cursor(row=0)
+    await pilot.pause()
+    await pilot.press("a")
+    await pilot.pause()
+
+
+async def test_la_tecla_a_abre_el_alcance():
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.alcance import AlcanceScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await _abrir_alcance(app, pilot)
+        assert isinstance(app.screen, AlcanceScreen)
+
+
+async def test_si_no_hay_alcance_se_propone_el_host_del_flujo():
+    """Como el «Add to scope» de Burp: el gesto mas comun es meter el
+    objetivo que ya estas mirando, y teclearlo entero sobra."""
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await _abrir_alcance(app, pilot, "http://objetivo.com:3000/x")
+        texto = app.screen.query_one("#alc-editor", TextArea).text
+        assert "+objetivo.com" in texto
+
+
+async def test_con_alcance_puesto_no_se_pisa_lo_escrito():
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.pause()
+        app.poner_alcance("+ya.estaba.com")
+        await _abrir_alcance(app, pilot)
+        assert app.screen.query_one("#alc-editor", TextArea).text.strip() == \
+            "+ya.estaba.com"
+
+
+async def test_guardar_aplica_el_alcance():
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await _abrir_alcance(app, pilot)
+        app.screen.query_one("#alc-editor", TextArea).text = "+nuevo.com"
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        assert app.alcance.dentro("http://nuevo.com/x")
+        assert not app.alcance.dentro("http://objetivo.com/x")
+
+
+async def test_esc_no_guarda():
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.pause()
+        app.poner_alcance("+original.com")
+        await _abrir_alcance(app, pilot)
+        app.screen.query_one("#alc-editor", TextArea).text = "+descartado.com"
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.alcance.dentro("http://original.com/x")
+        assert not app.alcance.dentro("http://descartado.com/x")
+
+
+async def test_una_regla_mala_se_señala_y_no_cierra():
+    from textual.widgets import Static, TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.alcance import AlcanceScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await _abrir_alcance(app, pilot)
+        app.screen.query_one("#alc-editor", TextArea).text = "+bueno.com\n+++"
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        assert isinstance(app.screen, AlcanceScreen), "no cierra con errores"
+        assert "host invalido" in app.screen.query_one("#alc-aviso",
+                                                       Static).render().plain
+        assert app.alcance.dentro("http://bueno.com/x")      # la buena se aplico
+
+
+async def test_el_filtro_del_historial_se_alterna_y_se_guarda(tmp_path):
+    from luzxfer.tui.app import LuzxferApp
+    ruta = str(tmp_path / "s.db")
+    app = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await _abrir_alcance(app, pilot)
+        assert app.solo_alcance is False
+        await pilot.press("ctrl+f")
+        await pilot.pause()
+        assert app.solo_alcance is True
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+
+    otra = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with otra.run_test() as pilot:
+        await pilot.pause()
+        assert otra.solo_alcance is True

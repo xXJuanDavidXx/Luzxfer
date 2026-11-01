@@ -24,6 +24,7 @@ from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import alcance as alc
 from ..core.tools import cuerpo, detector
+from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
 from .screens.repeater import RepeaterScreen
@@ -71,6 +72,7 @@ class LuzxferApp(App):
         Binding("r", "repeater", "repeater"),
         Binding("s", "sesiones", "sesiones"),
         Binding("i", "intruder", "intruder"),
+        Binding("a", "alcance", "alcance"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
         Binding("n", "nota", "nota"),
@@ -498,6 +500,18 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         self.actualizar_estado()
         return errores
+
+    def action_alcance(self) -> None:
+        sug = (sugerencia_desde(self._flujo_actual.request.url)
+               if self._flujo_actual is not None else "")
+        self.push_screen(AlcanceScreen(self.alcance.texto(),
+                                       self.solo_alcance, sug))
+
+    def poner_solo_alcance(self, valor: bool) -> None:
+        self.solo_alcance = valor
+        self.store.set_meta("solo_alcance", "si" if valor else "no")
+        self.refrescar_tabla()
+        self.actualizar_estado()
 
     def action_nota(self) -> None:
         if self._flujo_actual is None or self._flujo_actual.id is None:

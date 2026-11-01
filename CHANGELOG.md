@@ -8,7 +8,13 @@ experiencia de quien ya usaba la herramienta.
 ## [No publicado]
 
 ### Añadido
-- Nada todavía.
+- **Alcance** (`a`): reglas de inclusión y exclusión escritas como texto,
+  con comodín de subdominios, puerto y prefijo de ruta opcionales.
+  - Filtra la vista del historial (`ctrl+f`) y lo que analiza el detector,
+    **nunca la captura**: el tráfico fuera de alcance se guarda igual.
+  - Excluir siempre gana; sin reglas, todo está dentro.
+  - Propone el host del flujo que estés mirando cuando aún no hay alcance.
+  - Una línea mal escrita se señala sin tumbar las demás.
 
 ## [0.3.0] — 2026-11-01
 

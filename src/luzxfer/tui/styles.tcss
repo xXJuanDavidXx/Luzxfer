@@ -306,3 +306,20 @@ Button.-primary:hover {
 #int-estado { height: 2; margin: 1 0; }
 
 #int-resultados { height: 1fr; }
+
+/* alcance: se edita como texto, una regla por linea */
+#alc-caja {
+    width: 76%;
+    height: 80%;
+    background: #0e1016;
+    border: round #f0a93b;
+    padding: 1 2;
+}
+
+#alc-titulo { height: 1; margin-bottom: 1; }
+
+#alc-editor { height: 1fr; }
+
+#alc-ayuda { height: auto; margin-top: 1; }
+
+#alc-aviso { height: auto; margin-top: 1; }

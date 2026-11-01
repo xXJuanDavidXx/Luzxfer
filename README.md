@@ -103,6 +103,7 @@ ignorado.
 | `n` | escribir una nota en el flujo |
 | `m` | marcar un flujo |
 | `v` | confirmar el candidato seleccionado como hallazgo |
+| `a` | alcance: qué entra en el contrato |
 | `s` | sesiones |
 | `c` | limpiar el historial (los candidatos se conservan) |
 | `g` / `G` | primer / último flujo |
@@ -191,6 +192,43 @@ Los resultados **no entran al historial**: van a su propia tabla dentro de la
 sesión. Diez mil peticiones volverían el historial inservible para lo que es,
 y el detector correría sobre las diez mil generando miles de candidatos
 basura.
+
+## Alcance
+
+`a` abre el alcance. Se edita como texto, una regla por línea, porque un
+alcance se copia del correo donde el cliente lo definió, se pega, se
+retoca y a veces acaba en el informe: como texto eso funciona, y como
+formulario no.
+
+```
++objetivo.com          incluir ese host, cualquier puerto
++*.objetivo.com        y sus subdominios, con la raíz dentro
++objetivo.com:8080     solo ese puerto
++objetivo.com/api/     solo bajo esa ruta
+-admin.objetivo.com    excluir; excluir siempre gana
+```
+
+Si todavía no hay alcance, se propone el host del flujo que estés mirando
+—el «Add to scope» de Burp—, sin el puerto: una aplicación suele repartirse
+entre el 80 y el 443, y un alcance atado a un puerto deja la mitad fuera
+sin avisar.
+
+**El alcance filtra la vista y lo que la herramienta origina, nunca la
+captura.** Descartar tráfico al capturarlo lo pierde para siempre, y en un
+pentest el tráfico que tiraste es justo el que no puedes recuperar. El
+proxy sigue guardándolo todo; lo que el alcance decide es qué se enseña
+(`ctrl+f` dentro de la pantalla), qué analiza el detector, y contra qué
+podrá disparar el DAST cuando exista.
+
+Dos reglas, una por cada forma de equivocarse:
+
+- **Excluir siempre gana.** Dejar dentro algo ajeno es, en un contrato, un
+  problema legal y no un bug.
+- **Sin reglas, todo está dentro.** Dejar fuera algo que sí estaba dentro es
+  trabajo perdido. El alcance se estrecha a propósito, nunca por descuido.
+
+El host no distingue mayúsculas y la ruta sí: en un servidor real `/API` y
+`/api` pueden ser cosas distintas.
 
 ## Candidatos, no hallazgos
 
@@ -288,7 +326,8 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] Sesiones con nombre, persistentes por defecto, con selector
 - [x] Notas, hallazgos confirmados, petición y respuesta lado a lado
 - [x] Intruder, cuatro modos, con grep-match sobre los resultados
-- [ ] Árbol de sitemap y alcance
+- [x] Alcance: reglas de inclusión y exclusión, filtro del historial
+- [ ] Árbol de sitemap
 - [ ] Interceptar y editar en vuelo — la brecha real contra Burp hoy
 - [ ] DAST con correa: exige alcance, disparo manual, ritmo limitado
 - [ ] Matriz de cobertura WSTG y generación de informes
