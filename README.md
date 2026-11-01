@@ -10,8 +10,8 @@ conserva ese estado entre sesiones.
 
 > **Estado: alfa.** Funcionan el núcleo, las sesiones con nombre, el
 > historial, el repeater, el Intruder, el alcance, el mapa del sitio y la
-> interceptación en vuelo y el barrido activo. Falta la matriz de cobertura
-> WSTG. Ver el roadmap,
+> interceptación en vuelo, el barrido activo y la matriz de cobertura WSTG
+> con generación de informes. Ver el roadmap,
 > y [CHANGELOG.md](CHANGELOG.md) para lo que cambió en cada versión.
 
 ---
@@ -108,6 +108,7 @@ ignorado.
 | `e` | mapa del sitio |
 | `x` | interceptar: parar las peticiones antes de que salgan |
 | `b` | barrido activo sobre el flujo seleccionado |
+| `w` | matriz de cobertura WSTG e informe |
 | `s` | sesiones |
 | `c` | limpiar el historial (los candidatos se conservan) |
 | `g` / `G` | primer / último flujo |
@@ -317,6 +318,44 @@ Dos reglas, una por cada forma de equivocarse:
 El host no distingue mayúsculas y la ruta sí: en un servidor real `/API` y
 `/api` pueden ser cosas distintas.
 
+## Cobertura WSTG e informe
+
+`w` abre la matriz. **Esto es la razón de ser del proyecto:** Burp conoce
+tus peticiones, no sabe qué pruebas de la metodología le debes todavía al
+cliente. Esa contabilidad suele acabar en una hoja de cálculo aparte.
+
+Las 97 pruebas de la WSTG v4.2, con sus identificadores y títulos tomados
+del documento oficial. Cada una tiene un estado:
+
+| estado | de dónde sale |
+| --- | --- |
+| `no probado` | nadie la ha mirado — lo que falta por hacer |
+| `con candidatos` | hay evidencia automática, nadie ha dictaminado |
+| `pasa` | la pones tú, con espacio |
+| `FALLA` | hay un hallazgo **confirmado** con ese ID |
+| `no aplica` | la pones tú; sale del denominador |
+
+**La evidencia gana a la opinión.** Si marcas una prueba como que pasa y
+luego confirmas un hallazgo con ese ID, la matriz dice `FALLA` y el
+espacio no la cambia. Un informe que diga que una prueba pasó teniendo
+una vulnerabilidad confirmada debajo no se puede entregar.
+
+**No haber mirado y no aplicar no son lo mismo.** Se cuentan aparte, y lo
+que no aplica sale del porcentaje: si una prueba no tiene sentido en este
+objetivo no es trabajo pendiente, y meterla en el denominador haría
+parecer que falta algo que no falta. Un candidato sin dictaminar tampoco
+cuenta como cobertura.
+
+`ctrl+g` escribe el informe en Markdown a
+`~/.local/share/luzxfer/informes/`: alcance, resumen por estado, hallazgos
+confirmados con sus flujos de evidencia, la matriz entera y los candidatos
+sin confirmar en un apéndice que dice en voz alta que **no son hallazgos**.
+
+Un detalle que importa: hay cabeceras de seguridad —CSP,
+`X-Content-Type-Options`, `Referrer-Policy`— que **no tienen prueba propia
+en la v4.2**, y se reportan sin ID en vez de tomar prestado uno ajeno para
+que la matriz parezca más completa.
+
 ## Barrido activo (DAST)
 
 `b` lanza un barrido sobre el flujo que tengas seleccionado. **Es lo único
@@ -445,7 +484,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] Árbol de sitemap
 - [ ] Interceptar y editar en vuelo — la brecha real contra Burp hoy
 - [x] DAST con correa: exige alcance, disparo manual, ritmo limitado
-- [ ] Matriz de cobertura WSTG y generación de informes
+- [x] Matriz de cobertura WSTG y generación de informes
 - [ ] Adaptador de motor mitmproxy
 - [ ] API de plugins
 - [ ] Personalización: temas, colores, atajos configurables

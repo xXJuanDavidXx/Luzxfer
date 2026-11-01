@@ -5,7 +5,7 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
-## [No publicado]
+## [0.4.0] — 2026-11-01
 
 ### Añadido
 - **Alcance** (`a`): reglas de inclusión y exclusión escritas como texto,
@@ -37,6 +37,28 @@ experiencia de quien ya usaba la herramienta.
   - Doble pulsación para lanzarlo: la primera dice cuántas peticiones.
   - 2 concurrentes, tope de 5/s del barrido entero.
   - Los hallazgos entran como candidatos sin confirmar.
+- **Matriz de cobertura WSTG e informes** (`w`): las 97 pruebas de la v4.2
+  con sus identificadores y títulos tomados del documento oficial.
+  - `FALLA` y `con candidatos` salen de la evidencia; `pasa` y `no aplica`
+    las pone una persona. La evidencia gana a la opinión.
+  - Lo que no aplica sale del denominador del porcentaje, y un candidato
+    sin dictaminar no cuenta como cobertura.
+  - `ctrl+g` genera el informe en Markdown con alcance, resumen,
+    hallazgos confirmados con sus flujos de evidencia, la matriz entera y
+    los candidatos en un apéndice.
+
+### Corregido
+- **El detector reclamaba `WSTG-CONF-07` por cualquier cabecera de
+  seguridad ausente**, y CONF-07 es «Test HTTP Strict Transport Security»:
+  el informe habría dicho que se probó HSTS porque faltaba un CSP. Ahora
+  `X-Frame-Options` va a `WSTG-CLNT-09`, HSTS a `WSTG-CONF-07` y solo
+  sobre https, y las que no tienen prueba propia en la v4.2 se reportan
+  **sin ID**. El detector gana además la comprobación de HSTS.
+
+## [No publicado]
+
+### Añadido
+- Nada todavía.
 
 ## [0.3.0] — 2026-11-01
 

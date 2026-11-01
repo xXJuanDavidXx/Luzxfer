@@ -26,6 +26,7 @@ from ..core.store import Store
 from ..core.tools import alcance as alc
 from ..core.tools import cuerpo, dast, detector, intercepta, sitemap
 from .screens.alcance import AlcanceScreen, sugerencia_desde
+from .screens.cobertura import CoberturaScreen
 from .screens.intercepta import InterceptaScreen
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
@@ -79,6 +80,7 @@ class LuzxferApp(App):
         Binding("e", "mapa", "mapa del sitio"),
         Binding("x", "interceptar", "interceptar"),
         Binding("b", "barrido", "barrido activo"),
+        Binding("w", "cobertura", "cobertura WSTG"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
         Binding("n", "nota", "nota"),
@@ -523,6 +525,9 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         self.actualizar_estado()
         return errores
+
+    def action_cobertura(self) -> None:
+        self.push_screen(CoberturaScreen())
 
     def action_barrido(self) -> None:
         """Barrido activo sobre el flujo elegido. Lleva correa.

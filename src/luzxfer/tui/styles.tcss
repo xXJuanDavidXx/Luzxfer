@@ -351,3 +351,18 @@ Button.-primary:hover {
 #int-crudo { height: 1fr; }
 
 #itc-ayuda { height: 1; margin-top: 1; }
+
+/* matriz de cobertura WSTG */
+#cob-caja {
+    width: 94%;
+    height: 90%;
+    background: #0e1016;
+    border: round #f0a93b;
+    padding: 1 2;
+}
+
+#cob-titulo { height: 1; margin-bottom: 1; }
+
+#cob-tabla { height: 1fr; }
+
+#cob-aviso { height: 2; margin-top: 1; }

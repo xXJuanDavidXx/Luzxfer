@@ -98,6 +98,14 @@ CREATE TABLE IF NOT EXISTS resultados (
 
 CREATE INDEX IF NOT EXISTS ix_res_ataque ON resultados(ataque_id);
 CREATE INDEX IF NOT EXISTS ix_res_largo  ON resultados(ataque_id, largo);
+
+-- Los estados de cobertura WSTG que pone una persona a mano. Los que
+-- salen de la evidencia no se guardan: se recalculan de los hallazgos,
+-- porque guardarlos seria tener dos verdades que pueden discrepar.
+CREATE TABLE IF NOT EXISTS cobertura (
+    wstg   TEXT PRIMARY KEY,
+    estado TEXT NOT NULL
+);
 """
 
 
@@ -392,6 +400,21 @@ class Store:
         with self._lock:
             self._con.execute("DELETE FROM resultados WHERE ataque_id=?", (ataque_id,))
             self._con.execute("DELETE FROM ataques WHERE id=?", (ataque_id,))
+            self._con.commit()
+
+    # ------------------------------------------------------- cobertura
+    def get_cobertura(self) -> dict[str, str]:
+        with self._lock:
+            filas = self._con.execute("SELECT wstg, estado FROM cobertura").fetchall()
+        return {f["wstg"]: f["estado"] for f in filas}
+
+    def set_cobertura(self, ident: str, estado: str) -> None:
+        with self._lock:
+            self._con.execute(
+                "INSERT INTO cobertura (wstg, estado) VALUES (?,?)"
+                " ON CONFLICT(wstg) DO UPDATE SET estado=excluded.estado",
+                (ident, estado),
+            )
             self._con.commit()
 
     # ------------------------------------------------------------------
