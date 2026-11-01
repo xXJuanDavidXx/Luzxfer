@@ -405,3 +405,34 @@ class Ataque:
                 wait(pendientes)
         finally:
             self.terminado = True
+
+
+SEPARADOR_CONJUNTOS = "---"
+
+
+def conjuntos_desde_texto(texto: str, *, limite: int = 1_000_000) -> list[list[str]]:
+    """Los conjuntos de payloads tal como se escriben en la pantalla.
+
+    Una linea con solo '---' separa un conjunto del siguiente, que es lo
+    que hace falta para horquilla y racimo sin montar una interfaz con un
+    cuadro por posicion.
+
+    Una linea que empieza por '@' es la ruta de un archivo y se expande
+    ahi mismo: pegar rockyou a mano en un cuadro de texto no es viable.
+    """
+    conjuntos: list[list[str]] = []
+    actual: list[str] = []
+    for linea in texto.splitlines():
+        if linea.strip() == SEPARADOR_CONJUNTOS:
+            if actual:
+                conjuntos.append(actual)
+            actual = []
+            continue
+        if linea.startswith("@"):
+            actual.extend(desde_archivo(linea[1:].strip(), limite=limite))
+            continue
+        if linea.strip():
+            actual.append(linea)
+    if actual:
+        conjuntos.append(actual)
+    return conjuntos

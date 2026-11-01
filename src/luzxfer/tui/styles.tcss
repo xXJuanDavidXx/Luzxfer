@@ -281,3 +281,28 @@ Button.-primary:hover {
     height: 3;
     margin: 0 1;
 }
+
+/* intruder: peticion y configuracion arriba, resultados abajo */
+#int-caja {
+    width: 96%;
+    height: 94%;
+    background: #0e1016;
+    border: round #f0a93b;
+    padding: 1 2;
+}
+
+#int-titulo { height: 1; margin-bottom: 1; }
+
+#int-arriba { height: 40%; }
+
+#int-editor { width: 2fr; }
+
+#int-lado { width: 1fr; margin-left: 1; }
+
+#int-payloads { height: 1fr; }
+
+#int-botones { height: 3; }
+
+#int-estado { height: 2; margin: 1 0; }
+
+#int-resultados { height: 1fr; }

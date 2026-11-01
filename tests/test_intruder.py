@@ -361,3 +361,228 @@ def test_el_total_se_sabe_sin_lanzar():
                              conjuntos=[[str(i) for i in range(100)]] * 2))
     assert a.total == 10_000
     assert a.enviadas == 0 and not a.terminado
+
+
+# ------------------------------------------- conjuntos escritos a mano
+def test_conjuntos_desde_texto_separa_por_tres_guiones():
+    texto = "admin\nroot\n---\n1\n2\n3"
+    assert intruder.conjuntos_desde_texto(texto) == [["admin", "root"],
+                                                     ["1", "2", "3"]]
+
+
+def test_conjuntos_desde_texto_sin_separador_es_uno_solo():
+    assert intruder.conjuntos_desde_texto("a\nb") == [["a", "b"]]
+
+
+def test_conjuntos_desde_texto_carga_archivos_con_arroba(tmp_path):
+    """Pegar rockyou a mano en un cuadro de texto no es viable."""
+    f = tmp_path / "w.txt"
+    f.write_text("de-archivo-1\nde-archivo-2\n")
+    texto = f"a-mano\n@{f}\notra-a-mano"
+    assert intruder.conjuntos_desde_texto(texto) == [
+        ["a-mano", "de-archivo-1", "de-archivo-2", "otra-a-mano"]]
+
+
+def test_un_archivo_que_no_existe_lo_dice_con_su_ruta(tmp_path):
+    with pytest.raises(intruder.ErrorAtaque) as e:
+        intruder.conjuntos_desde_texto(f"@{tmp_path / 'no-esta.txt'}")
+    assert "no-esta.txt" in str(e.value)
+
+
+def test_conjuntos_vacios_no_cuentan():
+    assert intruder.conjuntos_desde_texto("a\n---\n\n---\nb") == [["a"], ["b"]]
+    assert intruder.conjuntos_desde_texto("") == []
+
+
+# --------------------------------------------------- la pantalla (tecla i)
+def _flujo_a(h, p, ruta="/eco?q=admin"):
+    from luzxfer.core.models import Flow, Request, Response
+    return Flow(request=Request(method="GET", url=f"http://{h}:{p}{ruta}",
+                                headers=[("Host", f"{h}:{p}")]),
+                response=Response(status=200, reason="OK", body=b"ok"))
+
+
+async def _abrir(app, pilot, flujo):
+    from textual.widgets import DataTable
+    app._ingresar(flujo)
+    await pilot.pause()
+    app.query_one("#flujos", DataTable).move_cursor(row=0)
+    await pilot.pause()
+    await pilot.press("i")
+    await pilot.pause()
+
+
+async def test_la_tecla_i_abre_el_intruder_con_la_peticion_cargada(eco):
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intruder import IntruderScreen
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        assert isinstance(app.screen, IntruderScreen)
+        assert "GET /eco?q=admin" in app.screen.query_one("#int-editor", TextArea).text
+
+
+async def test_intruder_sin_seleccion_avisa_y_no_abre():
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("i")
+        await pilot.pause()
+        assert app.screen is app.screen_stack[0]
+
+
+async def test_ctrl_m_envuelve_la_palabra_bajo_el_cursor(eco):
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        ed = app.screen.query_one("#int-editor", TextArea)
+        i = ed.text.index("admin")
+        ed.selection = ed.document.get_selection_from_offsets(i, i + 5) \
+            if hasattr(ed.document, "get_selection_from_offsets") else ed.selection
+        app.screen._marcar_rango(i, i + 5)
+        await pilot.pause()
+        assert "§admin§" in app.screen.query_one("#int-editor", TextArea).text
+
+
+async def test_la_pantalla_dice_cuantas_peticiones_saldrian(eco):
+    from textual.widgets import Static, TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        s = app.screen
+        s.query_one("#int-editor", TextArea).text = (
+            f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n")
+        s.query_one("#int-payloads", TextArea).text = "a\nb\nc\nd"
+        s._refrescar_total()
+        await pilot.pause()
+        assert "4" in s.query_one("#int-estado", Static).render().plain
+
+
+async def test_lanzar_sin_marcadores_avisa_y_no_manda_nada(eco):
+    from textual.widgets import DataTable, Static
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        await pilot.press("ctrl+l")
+        await pilot.pause()
+        assert app.screen.query_one("#int-resultados", DataTable).row_count == 0
+        assert "§" in app.screen.query_one("#int-estado", Static).render().plain
+
+
+async def test_los_resultados_aparecen_y_se_ordenan_por_largo(eco):
+    from textual.widgets import DataTable, TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        s = app.screen
+        s.query_one("#int-editor", TextArea).text = (
+            f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n")
+        # payloads de distinto largo: el eco los refleja en la ruta, asi
+        # que la respuesta mide distinto segun el payload
+        s.query_one("#int-payloads", TextArea).text = "a\nbbbbbbbbbbbbbbbbbbbb\ncc"
+        await pilot.press("ctrl+l")
+
+        tabla = s.query_one("#int-resultados", DataTable)
+        for _ in range(60):
+            await pilot.pause(0.1)
+            if tabla.row_count >= 3 and s.ataque and s.ataque.terminado:
+                break
+        assert tabla.row_count == 3
+
+        s.ordenar_por_largo()
+        await pilot.pause()
+        largos = [int(str(tabla.get_row_at(f)[3])) for f in range(tabla.row_count)]
+        assert largos == sorted(largos, reverse=True)
+
+
+async def test_el_ataque_queda_guardado_en_la_sesion(eco, tmp_path):
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(db=str(tmp_path / "s.db"), arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        s = app.screen
+        s.query_one("#int-editor", TextArea).text = (
+            f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n")
+        s.query_one("#int-payloads", TextArea).text = "uno\ndos"
+        await pilot.press("ctrl+l")
+        for _ in range(60):
+            await pilot.pause(0.1)
+            if s.ataque and s.ataque.terminado:
+                break
+        await pilot.pause(0.2)
+
+        ataques = app.store.list_ataques()
+        assert len(ataques) == 1 and ataques[0]["total"] == 2
+        assert len(app.store.list_resultados(ataques[0]["id"])) == 2
+        assert app.store.count_flows() == 1       # solo el flujo que inyectamos
+
+
+async def test_la_interfaz_no_se_congela_durante_el_ataque(eco):
+    from textual.widgets import Static, TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        s = app.screen
+        s.query_one("#int-editor", TextArea).text = (
+            f"GET /lento?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n")
+        s.query_one("#int-payloads", TextArea).text = "a\nb"
+        t = time.time()
+        await pilot.press("ctrl+l")
+        await pilot.pause()
+        assert time.time() - t < 0.8
+        assert "lanzando" in s.query_one("#int-estado", Static).render().plain.lower()
+        s.action_abortar()
+
+
+async def test_ctrl_o_ordena_por_largo(eco):
+    """El mensaje de estado promete este atajo; tiene que existir."""
+    from textual.widgets import DataTable, TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        s = app.screen
+        s.query_one("#int-editor", TextArea).text = (
+            f"GET /eco?q=§X§ HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n")
+        s.query_one("#int-payloads", TextArea).text = "a\nbbbbbbbbbbbbbbbbbbbb\ncc"
+        await pilot.press("ctrl+l")
+        tabla = s.query_one("#int-resultados", DataTable)
+        for _ in range(60):
+            await pilot.pause(0.1)
+            if s.ataque and s.ataque.terminado and tabla.row_count >= 3:
+                break
+
+        await pilot.press("ctrl+o")
+        await pilot.pause()
+        largos = [int(str(tabla.get_row_at(f)[3])) for f in range(tabla.row_count)]
+        assert largos == sorted(largos, reverse=True)
+
+        await pilot.press("ctrl+o")          # vuelve a alternar
+        await pilot.pause()
+        largos = [int(str(tabla.get_row_at(f)[3])) for f in range(tabla.row_count)]
+        assert largos == sorted(largos)

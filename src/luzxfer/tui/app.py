@@ -22,6 +22,7 @@ from ..core.engine import Builtin, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import detector
+from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
 from .screens.repeater import RepeaterScreen
 from .screens.sesiones import SesionesScreen
@@ -67,6 +68,7 @@ class LuzxferApp(App):
         Binding("q", "quit", "salir"),
         Binding("r", "repeater", "repeater"),
         Binding("s", "sesiones", "sesiones"),
+        Binding("i", "intruder", "intruder"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
         Binding("n", "nota", "nota"),
@@ -412,6 +414,12 @@ class LuzxferApp(App):
             self.notify("selecciona un flujo primero", severity="warning")
             return
         self.push_screen(RepeaterScreen(self._flujo_actual))
+
+    def action_intruder(self) -> None:
+        if self._flujo_actual is None:
+            self.notify("selecciona un flujo primero", severity="warning")
+            return
+        self.push_screen(IntruderScreen(self._flujo_actual))
 
     def action_sesiones(self) -> None:
         self.push_screen(SesionesScreen(self.sesion), self._tras_elegir_sesion)
