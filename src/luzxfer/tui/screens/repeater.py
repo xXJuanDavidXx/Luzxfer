@@ -10,6 +10,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Static, TextArea
 
 from ...core.models import Flow
+from ...core.tools import cuerpo as fmt
 from ...core.tools import repeater
 
 
@@ -107,15 +108,18 @@ class RepeaterScreen(ModalScreen):
         r = flujo.response
         color = {2: "#6fcf8f", 3: "#5fa8d3", 4: "#f0a93b", 5: "#e05c5c"}.get(
             r.status // 100, "#d9dde5")
-        cuerpo = r.text(100_000)
-        if len(r.decoded_body()) > 100_000:
-            cuerpo += "\n\n…(truncado)"
-        nota = f"  ({r.encoding} sin decodificar)" if r.sin_decodificar() else ""
-        salida.update(
-            Text.assemble(
-                (f"{r.status} {r.reason}", f"bold {color}"),
-                (f"   {flujo.duration_ms}ms   {len(r.body)} bytes{nota}\n\n", "#7b8496"),
-                (r.raw_headers() + "\n\n", "#7b8496"),
-                (cuerpo, "#c7cdd9"),
-            )
-        )
+        # la misma presentacion que el panel principal, y la misma
+        # preferencia: alternar con p en un sitio y no en el otro seria
+        # dos herramientas distintas dentro del mismo programa
+        texto, nota = fmt.presentar(r.decoded_body(), r.content_type,
+                                    bonito=getattr(self.app, "cuerpo_bonito", True))
+        enc = f"  ({r.encoding} sin decodificar)" if r.sin_decodificar() else ""
+        partes = [
+            (f"{r.status} {r.reason}", f"bold {color}"),
+            (f"   {flujo.duration_ms}ms   {len(r.body)} bytes{enc}\n\n", "#7b8496"),
+            (r.raw_headers() + "\n\n", "#7b8496"),
+        ]
+        if nota:
+            partes.append((f"— {nota}\n\n", "#5fa8d3"))
+        partes.append((texto, "#c7cdd9"))
+        salida.update(Text.assemble(*partes))

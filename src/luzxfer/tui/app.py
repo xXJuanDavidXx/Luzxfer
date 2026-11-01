@@ -21,7 +21,7 @@ from textual.widgets import (
 from ..core.engine import Builtin, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
-from ..core.tools import detector
+from ..core.tools import cuerpo, detector
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
 from .screens.repeater import RepeaterScreen
@@ -74,6 +74,7 @@ class LuzxferApp(App):
         Binding("n", "nota", "nota"),
         Binding("v", "confirmar", "confirmar"),
         Binding("t", "vista", "vista"),
+        Binding("p", "cuerpo", "crudo/bonito"),
         Binding("c", "limpiar", "limpiar"),
         Binding("g", "arriba", "inicio", show=False),
         Binding("G", "abajo", "final", show=False),
@@ -110,6 +111,7 @@ class LuzxferApp(App):
         self._flujo_actual: Flow | None = None
         self._filtro = ""
         self.vista_combinada = False
+        self.cuerpo_bonito = True
 
     # ------------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -162,6 +164,7 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         # la vista se lee aqui y no en __init__: ahi los widgets no existen
         self._aplicar_vista(self.store.get_meta("vista") == "juntas")
+        self.cuerpo_bonito = self.store.get_meta("cuerpo", "bonito") != "crudo"
 
         if self.arrancar_motor:
             self.arrancar()
@@ -194,6 +197,16 @@ class LuzxferApp(App):
             det.hide_tab("tab-ambos")
         self.query_one("#btn-vista", Button).label = (
             "vista: juntas" if combinada else "vista: separadas")
+
+    def action_cuerpo(self) -> None:
+        """Alterna entre el cuerpo reorganizado y los bytes tal como
+        llegaron. Un JSON indentado se lee; el crudo es la evidencia,
+        y a veces el espaciado o una clave repetida son el hallazgo."""
+        self.cuerpo_bonito = not self.cuerpo_bonito
+        self.store.set_meta("cuerpo",
+                            "bonito" if self.cuerpo_bonito else "crudo")
+        if self._flujo_actual is not None:
+            self._pintar_detalle(self._flujo_actual)
 
     def action_vista(self) -> None:
         self._aplicar_vista(not self.vista_combinada)
@@ -361,11 +374,8 @@ class LuzxferApp(App):
             return
 
         r = f.response
-        cuerpo = r.text(200_000)
-        # sobre el cuerpo YA descomprimido: medirlo comprimido decia
-        # «truncado» cuando no lo estaba
-        if len(r.decoded_body()) > 200_000:
-            cuerpo += "\n\n…(truncado)"
+        texto, nota = cuerpo.presentar(r.decoded_body(), r.content_type,
+                                       bonito=self.cuerpo_bonito)
 
         partes = [(r.raw_headers() + "\n\n", "#7b8496")]
         if r.sin_decodificar():
@@ -379,7 +389,9 @@ class LuzxferApp(App):
                 f"  Por el proxy no deberia pasar; si pasa, el servidor ignoro\n"
                 f"  el Accept-Encoding. Solucion:  pip install 'luzxfer[br]'\n\n",
                 "#f0a93b"))
-        partes.append((cuerpo, "#c7cdd9"))
+        if nota:
+            partes.append((f"— {nota}\n\n", "#5fa8d3"))
+        partes.append((texto, "#c7cdd9"))
         self._poner("resp", Text.assemble(*partes))
 
     def _poner(self, lado: str, texto: Text) -> None:

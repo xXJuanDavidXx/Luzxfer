@@ -476,3 +476,96 @@ async def test_la_vista_elegida_sobrevive_al_reinicio(tmp_path):
         await pilot.pause()
         assert otra.vista_combinada is True
         assert otra.query_one("#detalle").active == "tab-ambos"
+
+
+# -------------------------------------------- presentacion del cuerpo (p)
+def _flujo_json(cuerpo=b'{"status":"success","data":{"id":6,"coupon":null}}'):
+    return Flow(
+        request=Request(method="GET", url="http://ej.com/rest/basket/6",
+                        headers=[("Host", "ej.com")]),
+        response=Response(status=200, reason="OK", body=cuerpo,
+                          headers=[("Content-Type", "application/json; charset=utf-8")]),
+    )
+
+
+async def test_el_json_se_ve_indentado_por_defecto():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo_json())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        panel = app.query_one("#panel-resp", Static).render().plain
+        assert '"status": "success"' in panel          # con espacio: indentado
+        assert "reorganizado" in panel.lower()         # y lo dice
+
+
+async def test_la_tecla_p_alterna_entre_bonito_y_crudo():
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo_json())
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        assert app.cuerpo_bonito is True
+
+        await pilot.press("p")
+        await pilot.pause()
+        assert app.cuerpo_bonito is False
+        panel = app.query_one("#panel-resp", Static).render().plain
+        assert '{"status":"success"' in panel          # tal cual llego
+        assert "reorganizado" not in panel.lower()
+
+        await pilot.press("p")
+        await pilot.pause()
+        assert '"status": "success"' in (
+            app.query_one("#panel-resp", Static).render().plain)
+
+
+async def test_un_json_invalido_se_muestra_y_se_dice():
+    """Que el servidor conteste JSON roto es un dato del pentest."""
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(_flujo_json(b'{"a":1,}'))
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        panel = app.query_one("#panel-resp", Static).render().plain
+        assert '{"a":1,}' in panel
+        assert "no es json valido" in panel.lower()
+
+
+async def test_un_binario_se_resume_en_vez_de_volcarse():
+    """El caso del .woff de 40 KB: antes llenaba el panel de basura."""
+    f = Flow(
+        request=Request(method="GET", url="http://ej.com/media/f.woff",
+                        headers=[("Host", "ej.com")]),
+        response=Response(status=200, reason="OK",
+                          body=b"wOFF\x00\x01\x02\x03" * 5000,
+                          headers=[("Content-Type", "font/woff")]),
+    )
+    app = app_prueba()
+    async with app.run_test() as pilot:
+        app._ingresar(f)
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        panel = app.query_one("#panel-resp", Static).render().plain
+        assert "font/woff" in panel and "binario" in panel.lower()
+        assert "00000000" in panel                  # volcado hexadecimal
+        assert len(panel) < 30_000                  # no son los 40 KB crudos
+
+
+async def test_la_preferencia_de_cuerpo_sobrevive_al_reinicio(tmp_path):
+    ruta = str(tmp_path / "s.db")
+    app = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("p")
+        await pilot.pause()
+        assert app.cuerpo_bonito is False
+
+    otra = LuzxferApp(db=ruta, arrancar_motor=False)
+    async with otra.run_test() as pilot:
+        await pilot.pause()
+        assert otra.cuerpo_bonito is False
