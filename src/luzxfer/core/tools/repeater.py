@@ -75,6 +75,7 @@ def send_raw(
     tls: bool | None = None,
     recalcular_cl: bool = True,
     timeout: float = 30.0,
+    seguir: int = 0,
 ) -> Flow:
     """Manda la peticion y devuelve el Flow, con error dentro si fallo.
 
@@ -82,7 +83,66 @@ def send_raw(
     peticion (agrega Accept-Encoding, colapsa cabeceras duplicadas, rechaza
     valores que no le gustan), y un repeater que corrige lo que escribes no
     sirve para probar lo que el servidor hace con lo raro.
+
+    `seguir` es cuantas redirecciones encadenar; 0, el valor por defecto,
+    es no seguir ninguna. Igual que el proxy: un 30x se enseña tal como
+    lo mando el servidor, y seguirlo sin pedirlo esconderia la respuesta
+    que uno vino a mirar. Las rutas por las que se paso quedan en
+    `Flow.saltos`.
     """
+    saltos: list[str] = []
+    for _ in range(max(0, seguir) + 1):
+        flujo = _una_vez(texto, host=host, port=port, tls=tls,
+                         recalcular_cl=recalcular_cl, timeout=timeout)
+        flujo.saltos = list(saltos)
+        r = flujo.response
+        if r is None or not (300 <= r.status < 400):
+            return flujo
+        destino = r.header("location")
+        if not destino or len(saltos) >= seguir:
+            return flujo
+        siguiente = _siguiente_peticion(texto, destino)
+        if siguiente is None:
+            # a otro host: pararse es lo correcto. Seguir a donde diga el
+            # servidor es como un objetivo saca la herramienta de su
+            # alcance sin que nadie lo haya decidido.
+            return flujo
+        saltos.append(parse_raw(texto)[1])
+        texto = siguiente
+    return flujo
+
+
+def _siguiente_peticion(texto: str, destino: str) -> str | None:
+    """La peticion para seguir una redireccion, o None si cambia de host."""
+    from urllib.parse import urlsplit
+
+    metodo, _ruta, version, cabeceras, cuerpo = parse_raw(texto)
+    u = urlsplit(destino)
+    if u.scheme or u.netloc:
+        actual = destino_de(cabeceras)
+        if actual is None or u.hostname != actual[0]:
+            return None
+        nueva = u.path + (f"?{u.query}" if u.query else "")
+    else:
+        nueva = destino
+    # un 30x se sigue con GET y sin cuerpo: es lo que hace un navegador
+    # y lo que espera cualquiera que mire la cadena
+    cabeceras = [(k, v) for k, v in cabeceras if k.lower() != "content-length"]
+    lineas = [f"GET {nueva or '/'} {version}"]
+    lineas += [f"{k}: {v}" for k, v in cabeceras]
+    return "\r\n".join(lineas) + "\r\n\r\n"
+
+
+def _una_vez(
+    texto: str,
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    tls: bool | None = None,
+    recalcular_cl: bool = True,
+    timeout: float = 30.0,
+) -> Flow:
+    """Un solo envio, sin seguir nada."""
     metodo, ruta, version, cabeceras, cuerpo = parse_raw(texto)
 
     objetivo = (host, port) if host else destino_de(cabeceras)

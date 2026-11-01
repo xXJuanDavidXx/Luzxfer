@@ -102,6 +102,17 @@ CREATE INDEX IF NOT EXISTS ix_res_largo  ON resultados(ataque_id, largo);
 -- Los estados de cobertura WSTG que pone una persona a mano. Los que
 -- salen de la evidencia no se guardan: se recalculan de los hallazgos,
 -- porque guardarlos seria tener dos verdades que pueden discrepar.
+-- Las pestañas del repeater. Se guarda la PETICION, no la respuesta:
+-- lo que cuesta veinte minutos de afinar es lo que escribiste tu, y la
+-- respuesta se vuelve a pedir en un segundo.
+CREATE TABLE IF NOT EXISTS repeticiones (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    creado REAL    NOT NULL,
+    titulo TEXT    NOT NULL DEFAULT '',
+    crudo  TEXT    NOT NULL,
+    tls    INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS cobertura (
     wstg   TEXT PRIMARY KEY,
     estado TEXT NOT NULL
@@ -400,6 +411,32 @@ class Store:
         with self._lock:
             self._con.execute("DELETE FROM resultados WHERE ataque_id=?", (ataque_id,))
             self._con.execute("DELETE FROM ataques WHERE id=?", (ataque_id,))
+            self._con.commit()
+
+    # ---------------------------------------- pestañas del repeater
+    def add_repeticion(self, titulo: str, crudo: str, tls: bool) -> int:
+        with self._lock:
+            cur = self._con.execute(
+                "INSERT INTO repeticiones (creado, titulo, crudo, tls)"
+                " VALUES (?,?,?,?)", (time.time(), titulo, crudo, int(tls)))
+            self._con.commit()
+            return int(cur.lastrowid)
+
+    def set_repeticion(self, rid: int, crudo: str) -> None:
+        with self._lock:
+            self._con.execute("UPDATE repeticiones SET crudo=? WHERE id=?",
+                              (crudo, rid))
+            self._con.commit()
+
+    def list_repeticiones(self) -> list[dict]:
+        with self._lock:
+            filas = self._con.execute(
+                "SELECT * FROM repeticiones ORDER BY id").fetchall()
+        return [dict(f) for f in filas]
+
+    def borrar_repeticion(self, rid: int) -> None:
+        with self._lock:
+            self._con.execute("DELETE FROM repeticiones WHERE id=?", (rid,))
             self._con.commit()
 
     # ------------------------------------------------------- cobertura

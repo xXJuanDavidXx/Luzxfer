@@ -153,8 +153,7 @@ async def test_repeater_se_abre_con_la_peticion_cargada():
         await pilot.press("r")
         await pilot.pause()
 
-        from textual.widgets import TextArea
-        editor = app.screen.query_one("#rep-editor", TextArea)
+        editor = app.screen.editor_actual()
         assert "GET /ruta?q=PRUEBA HTTP/1.1" in editor.text
         assert "Host: ej.com" in editor.text
 
@@ -229,8 +228,8 @@ async def test_repeater_envia_de_verdad_y_muestra_la_respuesta():
             await pilot.press("r")
             await pilot.pause()
 
-            from textual.widgets import Button, TextArea
-            editor = app.screen.query_one("#rep-editor", TextArea)
+            from textual.widgets import Button
+            editor = app.screen.editor_actual()
             editor.text = (f"GET /x HTTP/1.1\r\nHost: {host}:{puerto}\r\n"
                            f"Content-Length: 999\r\n\r\n")
 
@@ -239,7 +238,7 @@ async def test_repeater_envia_de_verdad_y_muestra_la_respuesta():
             await pilot.pause()
             await pilot.pause()
 
-            salida = app.screen.query_one("#rep-salida", Static).render().plain
+            salida = app.screen.salida_actual().render().plain
             assert "200 OK" in salida
             assert "respuesta del repeater" in salida
             # el flujo del repeater queda en el historial como evidencia

@@ -67,6 +67,11 @@ experiencia de quien ya usaba la herramienta.
   reventaba al salir de la herramienta.
 
 ### Añadido
+- **Pestañas en el repeater**, y persisten con la sesión: cierras, sigues
+  navegando, vuelves y tu petición afinada sigue ahí. `ctrl+w` cierra una.
+- **Seguir redirecciones en el repeater** (`ctrl+r`), hasta cinco y
+  apagado por defecto. La salida dice por dónde pasó. No sigue a otro
+  host: eso dejaría que el objetivo saque la herramienta de su alcance.
 - **La interceptación en vuelo funciona también con el motor de
   mitmproxy**, sin bloquear su bucle: varias peticiones pueden estar
   detenidas a la vez sin que el proxy se atasque.

@@ -219,6 +219,10 @@ class Flow:
     note: str = ""
     marked: bool = False
     error: str = ""
+    # las rutas por las que paso una cadena de redirecciones, si se
+    # siguio. Vacio es lo normal: por donde paso importa tanto como
+    # donde acabo.
+    saltos: list[str] = field(default_factory=list)
 
     @property
     def status(self) -> int | None:

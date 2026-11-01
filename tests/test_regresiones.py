@@ -181,13 +181,13 @@ async def test_el_repeater_no_congela_la_interfaz(eco):
         await pilot.pause()
         # la interfaz respondio de inmediato y muestra que esta enviando
         assert time.time() - t < 0.8
-        assert "enviando" in app.screen.query_one("#rep-salida", Static).render().plain
+        assert "enviando" in app.screen.salida_actual().render().plain
 
         for _ in range(40):
             await pilot.pause(0.1)
-            if "200" in app.screen.query_one("#rep-salida", Static).render().plain:
+            if "200" in app.screen.salida_actual().render().plain:
                 break
-        assert "200" in app.screen.query_one("#rep-salida", Static).render().plain
+        assert "200" in app.screen.salida_actual().render().plain
 
 
 async def test_flujos_del_repeater_pasan_por_el_detector(eco):
@@ -202,8 +202,8 @@ async def test_flujos_del_repeater_pasan_por_el_detector(eco):
         await pilot.pause()
         await pilot.press("r")
         await pilot.pause()
-        from textual.widgets import Button, TextArea
-        app.screen.query_one("#rep-editor", TextArea).text = (
+        from textual.widgets import Button
+        app.screen.editor_actual().text = (
             f"GET /gzip?q=DESDEREPEATER HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n")
         app.screen.query_one("#rep-enviar", Button).press()
         for _ in range(30):
@@ -238,12 +238,14 @@ async def test_respuestas_largas_se_pueden_desplazar():
         assert isinstance(panel, VerticalScroll)
         assert panel.max_scroll_y > 0
 
-        # salida del repeater
+        # salida del repeater, ahora por pestaña
         await pilot.press("r")
         await pilot.pause()
-        app.screen._mostrar(largo)
+        rid = app.screen.pestanas()[0]
+        app.screen._mostrar(rid, largo)
         await pilot.pause()
-        assert app.screen.query_one("#rep-scroll", VerticalScroll).max_scroll_y > 0
+        scroll = app.screen.query_one(f"#scroll-{rid}", VerticalScroll)
+        assert scroll.max_scroll_y > 0
 
 
 # ------------------------------------------- 5. historial que no cabe entero
@@ -685,3 +687,56 @@ async def test_sigue_al_final_aunque_los_saltos_se_agrupen():
         app._ingresar(_f(99))
         await pilot.pause()
         assert tabla.cursor_row == tabla.row_count - 1
+
+
+# ------------------------- 10. el repeater siguiendo redirecciones
+def test_por_defecto_el_repeater_no_sigue_redirecciones(eco):
+    """Igual que el proxy: un 30x se enseña tal como lo mando el
+    servidor. Seguirlo por defecto esconderia la respuesta que uno vino
+    a mirar."""
+    h, p = eco
+    f = repeater.send_raw(f"GET /salta?n=2 HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n")
+    assert f.response.status == 302
+    assert f.response.header("location") == "/salta?n=1"
+    assert f.saltos == []
+
+
+def test_si_se_le_pide_sigue_la_cadena_entera(eco):
+    h, p = eco
+    f = repeater.send_raw(f"GET /salta?n=3 HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n",
+                          seguir=5)
+    assert f.response.status == 200
+    assert b"llegue" in f.response.body
+    # el camino recorrido queda a la vista: por donde paso importa
+    assert [s.split("?")[0] for s in f.saltos] == ["/salta", "/salta", "/salta"]
+
+
+def test_se_respeta_el_tope_de_saltos(eco):
+    h, p = eco
+    f = repeater.send_raw(f"GET /salta?n=9 HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n",
+                          seguir=2)
+    assert f.response.status == 302, "paro donde se le dijo"
+    assert len(f.saltos) == 2
+
+
+def test_un_bucle_de_redirecciones_no_cuelga(eco):
+    """Un servidor que redirige a si mismo para siempre es una forma
+    barata de colgar una herramienta."""
+    h, p = eco
+    f = repeater.send_raw(f"GET /bucle HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n",
+                          seguir=20)
+    assert f.response.status == 302
+    assert len(f.saltos) <= 20
+
+
+def test_una_redireccion_absoluta_a_otro_host_no_se_sigue(eco):
+    """Seguir a donde diga el servidor es como un objetivo saca la
+    herramienta de su alcance sin que nadie lo decida."""
+    h, p = eco
+    f = repeater.send_raw(
+        f"GET /eco HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n", seguir=3)
+    assert f.response.status == 200           # el eco no redirige
+    # y con una redireccion a otro host, se para
+    f2 = repeater.send_raw(
+        f"GET /salta?n=1 HTTP/1.1\r\nHost: {h}:{p}\r\n\r\n", seguir=3)
+    assert f2.response.status == 200          # /eco?q=llegue, mismo host

@@ -133,9 +133,26 @@ servidor dijo JSON y mandó algo que no lo es, queda dicho encima.
 
 ### Repeater
 
-`ctrl+s` envía, `esc` cierra. El `Content-Length` se recalcula al enviar,
-porque editar una petición cruda a mano y olvidarlo es el error más común que
-existe.
+`r` abre el repeater sobre el flujo seleccionado, **en una pestaña nueva**.
+
+```
+ctrl+s enviar · ctrl+w cerrar pestaña · ctrl+r seguir redirecciones · esc cerrar
+```
+
+**Las pestañas sobreviven a cerrar la pantalla y a cerrar la herramienta.**
+Una petición que has pasado veinte minutos afinando es justo lo que no se
+puede perder. Se guarda la petición y no la respuesta: lo que cuesta es lo
+que escribiste tú, y la respuesta se vuelve a pedir en un segundo.
+
+`ctrl+r` alterna seguir redirecciones, hasta cinco. Por defecto **no las
+sigue**, igual que el proxy: un `30x` se enseña tal como lo mandó el
+servidor, y seguirlo sin pedirlo escondería la respuesta que viniste a
+mirar. Cuando las sigue, la salida dice por dónde pasó — el camino importa
+tanto como el destino. Una redirección a **otro host** no se sigue nunca:
+eso sería dejar que el objetivo saque la herramienta de su alcance.
+
+El `Content-Length` se recalcula al enviar, porque editar una petición
+cruda a mano y olvidarlo es el error más común que existe.
 
 **Lo que escribes es lo que viaja.** El repeater escribe a un socket crudo en
 vez de pasar por una librería HTTP, así que las cabeceras duplicadas siguen

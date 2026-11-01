@@ -71,6 +71,20 @@ class _Eco(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(cuerpo)))
             self.end_headers()
             self.wfile.write(cuerpo)
+        elif self.path.startswith("/salta"):
+            # cadena de redirecciones: /salta?n=3 -> /salta?n=2 -> ... -> /eco
+            from urllib.parse import parse_qs, urlsplit
+            n = int(parse_qs(urlsplit(self.path).query).get("n", ["0"])[0])
+            destino = f"/salta?n={n - 1}" if n > 1 else "/eco?q=llegue"
+            self.send_response(302)
+            self.send_header("Location", destino)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        elif self.path.startswith("/bucle"):
+            self.send_response(302)
+            self.send_header("Location", "/bucle")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         elif self.path.startswith("/gzip"):
             q = self.path.split("q=", 1)[-1]
             cuerpo = gzip.compress(f"<html>buscaste: {q}</html>".encode())

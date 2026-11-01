@@ -590,7 +590,7 @@ class LuzxferApp(App):
         if self._flujo_actual is None:
             self.notify("selecciona un flujo primero", severity="warning")
             return
-        self.push_screen(RepeaterScreen(self._flujo_actual))
+        self.push_screen(RepeaterScreen(self.store, self._flujo_actual))
 
     def action_intruder(self) -> None:
         if self._flujo_actual is None:
