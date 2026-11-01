@@ -22,6 +22,7 @@ from textual.widgets import (
 from ..core.engine import Builtin, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
+from ..core.tools import alcance as alc
 from ..core.tools import cuerpo, detector
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
@@ -113,6 +114,8 @@ class LuzxferApp(App):
         self._filtro = ""
         self.vista_combinada = False
         self.cuerpo_bonito = True
+        self.alcance = alc.Alcance([])
+        self.solo_alcance = False
 
     # ------------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -166,6 +169,9 @@ class LuzxferApp(App):
         # la vista se lee aqui y no en __init__: ahi los widgets no existen
         self._aplicar_vista(self.store.get_meta("vista") == "juntas")
         self.cuerpo_bonito = self.store.get_meta("cuerpo", "bonito") != "crudo"
+        self.alcance, _ = alc.Alcance.desde_texto_tolerante(
+            self.store.get_meta("alcance"))
+        self.solo_alcance = self.store.get_meta("solo_alcance") == "si"
 
         if self.arrancar_motor:
             self.arrancar()
@@ -251,8 +257,14 @@ class LuzxferApp(App):
         """
         try:
             self.store.add_flow(flujo)
-            nuevos = [h for h in detector.analizar(flujo)
-                      if self.store.add_finding(h)]
+            # el flujo se guarda SIEMPRE; lo que el alcance decide es si
+            # vale la pena analizarlo. Los candidatos de un CDN o de
+            # analitica son ruido que entierra lo que si importa, y
+            # ademas no son del cliente.
+            nuevos = []
+            if not self.solo_analizar_alcance or self.alcance.dentro(flujo.request.url):
+                nuevos = [h for h in detector.analizar(flujo)
+                          if self.store.add_finding(h)]
         except sqlite3.Error as e:
             # otra instancia con la sesion tomada, disco lleno, archivo
             # borrado bajo los pies… Perder un flujo es malo; que la
@@ -275,6 +287,8 @@ class LuzxferApp(App):
         self.actualizar_estado()
 
     def _coincide(self, f: Flow) -> bool:
+        if self.solo_alcance and not self.alcance.dentro(f.request.url):
+            return False
         return not self._filtro or self._filtro.lower() in f.request.url.lower()
 
     @staticmethod
@@ -317,8 +331,11 @@ class LuzxferApp(App):
         tabla = self.query_one("#flujos", DataTable)
         elegido = self._flujo_actual.id if self._flujo_actual else None
         tabla.clear()
-        for f in self.store.list_flows(texto=self._filtro, ascendente=True,
-                                       limite=LIMITE_TABLA):
+        flujos = self.store.list_flows(texto=self._filtro, ascendente=True,
+                                       limite=LIMITE_TABLA)
+        if self.solo_alcance:
+            flujos = [f for f in flujos if self.alcance.dentro(f.request.url)]
+        for f in flujos:
             self._agregar_fila(tabla, f)
         if tabla.row_count:
             fila = tabla.row_count - 1
@@ -349,7 +366,13 @@ class LuzxferApp(App):
         # es hacerle creer al analista que ya vio el historial entero.
         mostrados = self.query_one("#flujos", DataTable).row_count
         total = self.store.count_flows(texto=self._filtro) if self._filtro else n
-        if mostrados < total:
+        # se distinguen los dos motivos de ver menos de lo que hay: que
+        # no quepa y que este fuera de alcance no son lo mismo, y un solo
+        # mensaje para ambos haria pensar en el que no es
+        if self.solo_alcance:
+            piezas += [(f"solo alcance: {mostrados} de {total}", "#5fa8d3"),
+                       ("  ·  ", "#39404f")]
+        elif mostrados < total:
             piezas += [(f"mostrando {mostrados} de {total}", "#e05c5c"),
                        ("  ·  ", "#39404f")]
 
@@ -459,6 +482,22 @@ class LuzxferApp(App):
             return
         self.notify(f"luzxfer -s {nombre}", title="para abrir esa sesion",
                     timeout=10)
+
+    @property
+    def solo_analizar_alcance(self) -> bool:
+        """Sin alcance puesto no se filtra nada: una sesion recien abierta
+        no puede dejar de analizar por descuido."""
+        return self.alcance.configurado
+
+    def poner_alcance(self, texto: str) -> list[str]:
+        """Cambia el alcance y lo guarda. Devuelve las lineas que no se
+        pudieron leer, para poder enseniarlas sin perder las buenas."""
+        nuevo, errores = alc.Alcance.desde_texto_tolerante(texto)
+        self.alcance = nuevo
+        self.store.set_meta("alcance", nuevo.texto())
+        self.refrescar_tabla()
+        self.actualizar_estado()
+        return errores
 
     def action_nota(self) -> None:
         if self._flujo_actual is None or self._flujo_actual.id is None:
