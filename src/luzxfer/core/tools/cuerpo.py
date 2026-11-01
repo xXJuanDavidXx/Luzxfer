@@ -35,6 +35,11 @@ MARCAS_BINARIAS = ("octet-stream", "pdf", "zip", "gzip", "protobuf",
 
 BYTES_POR_LINEA = 16
 
+# Cuantas veces el limite de pantalla puede medir un cuerpo y todavia
+# valer la pena reorganizarlo. Indentar engorda el texto entre 1,5 y 3
+# veces, asi que con 4 cabe el caso normal de sobra y se corta el abuso.
+UMBRAL_EMBELLECER = 4
+
 
 def es_json(ctype: str) -> bool:
     """Cubre application/json, text/json y los +json tipo problem+json."""
@@ -116,10 +121,22 @@ def presentar(
             nota += f" · se vuelcan los primeros {limite} bytes"
         return volcado_hex(datos, limite=min(limite, 4096)), nota
 
-    texto = datos.decode("utf-8", "replace")
     notas = []
 
-    if bonito and es_json(ctype):
+    # Por encima del umbral no se reorganiza, y ni siquiera se decodifica
+    # entero. Parsear el JSON completo y volver a serializarlo para
+    # quedarse con los primeros 200.000 caracteres es trabajo no acotado
+    # para una salida acotada: 51 MB costaban 3 s de interfaz congelada y
+    # 215 MB de pico, solo por seleccionar un flujo. Y no se pierde nada,
+    # porque un JSON recortado no se puede parsear de todas formas.
+    enorme = len(datos) > limite * UMBRAL_EMBELLECER
+    if enorme:
+        notas.append("demasiado grande para reorganizarlo")
+        datos = datos[:limite + 1]
+
+    texto = datos.decode("utf-8", "replace")
+
+    if bonito and es_json(ctype) and not enorme:
         mejor = embellecer_json(texto)
         if mejor is not None:
             texto = mejor

@@ -147,3 +147,46 @@ def test_presentar_un_cuerpo_vacio_no_revienta():
     for ctype in ("application/json", "text/html", "font/woff", ""):
         texto, nota = cuerpo.presentar(b"", ctype, bonito=True)
         assert texto == ""
+
+
+# ------------------------------------------- trabajo acotado (regresion)
+def test_un_cuerpo_enorme_no_se_parsea_entero_para_mostrar_un_trozo():
+    """Regresion. presentar() parseaba el JSON completo y lo volvia a
+    serializar para quedarse con los primeros 200.000 caracteres: 51 MB
+    costaban 3 s de interfaz congelada y 215 MB de pico, solo por
+    seleccionar un flujo. En Termux, que es un telefono, mucho peor.
+
+    Por encima del umbral no se reorganiza: un JSON recortado no se puede
+    parsear de todas formas, asi que embellecer un cuerpo enorme solo
+    sirve para tirar el trabajo a la basura."""
+    import time
+
+    grande = json.dumps([{"id": i, "d": "x" * 200} for i in range(60_000)]).encode()
+    assert len(grande) > 10_000_000
+
+    t = time.time()
+    texto, nota = cuerpo.presentar(grande, "application/json", bonito=True,
+                                   limite=200_000)
+    assert time.time() - t < 0.5
+    assert len(texto) < 220_000
+    assert "demasiado grande" in nota.lower()
+    assert "recortado" in nota.lower()
+    assert "reorganizado" not in nota.lower()
+
+
+def test_un_json_que_cabe_si_se_reorganiza():
+    """El umbral no debe castigar al caso normal."""
+    normal = json.dumps([{"id": i} for i in range(50)]).encode()
+    texto, nota = cuerpo.presentar(normal, "application/json", bonito=True,
+                                   limite=200_000)
+    assert '"id": 0' in texto
+    assert "reorganizado" in nota.lower()
+
+
+def test_un_binario_enorme_tampoco_se_decodifica_entero():
+    import time
+    enorme = (b"\x89PNG\x00\x01\x02\x03" * 2_000_000)      # 16 MB
+    t = time.time()
+    texto, nota = cuerpo.presentar(enorme, "image/png", bonito=True)
+    assert time.time() - t < 0.5
+    assert "00000000" in texto and "binario" in nota.lower()
