@@ -25,8 +25,8 @@ from .ajustes import leer_ini
 # verdad, porque una lista que se desincroniza del codigo deja al
 # usuario configurando atajos que no hacen nada.
 ACCIONES = {
-    "salir", "repeater", "intruder", "sesiones", "alcance", "mapa",
-    "interceptar", "barrido", "cobertura", "marcar", "nota",
+    "salir", "ayuda", "repeater", "intruder", "sesiones", "alcance",
+    "mapa", "interceptar", "barrido", "cobertura", "marcar", "nota",
     "confirmar", "vista", "cuerpo", "limpiar", "arriba", "abajo",
     "foco_filtro", "buscar", "conversor", "comparar",
     "cursor_abajo", "cursor_arriba", "quitar_foco",

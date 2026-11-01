@@ -209,3 +209,20 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   que estaba en el esquema sin usarse desde la primera versión. A partir de
   aquí se versiona: la 0.2.0 sale con la Tarea 11, porque cambia un
   comportamiento por defecto (la 0.1.0 perdía el historial, la 0.2.0 no).
+- **2026-11-01** — Auditoría de documentación contra la realidad, en rama
+  propia. Resultado: la tabla de teclas del README estaba **completa y
+  correcta** (los huecos que marcaban mis scripts eran artefactos del regex,
+  no de la documentación), pero el **pie de la pantalla recortaba trece de
+  veinte atajos a ochenta columnas**, en silencio, sin flecha ni puntos
+  suspensivos. El mismo patrón que el brotli, el 304 y el `.woff`: la
+  herramienta no fallaba, escondía la mitad de sí misma, y las funciones
+  invisibles eran justo las que más costaron. Se añade `?` con la lista
+  completa y se baja el pie a seis teclas.
+  **La decisión de fondo:** no apretar más teclas en el pie. A ningún ancho
+  caben las veinticuatro, así que el problema no era el espacio sino creer
+  que el pie podía ser el catálogo. El pie es para lo diario; el catálogo
+  tiene su pantalla. Y esa pantalla se construye de los atajos **activos**,
+  nunca de una lista escrita a mano: una ayuda mantenida aparte del código
+  se desincroniza en el primer cambio y manda a probar teclas muertas.
+  **La lección, que es la misma de siempre:** lo que la interfaz no pueda
+  mostrar tiene que decirlo, nunca descartarlo callando.

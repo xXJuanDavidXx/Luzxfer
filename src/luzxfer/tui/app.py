@@ -30,6 +30,7 @@ from ..core.tools import cuerpo, dast, detector, intercepta, sitemap
 from . import paleta, teclas
 from .paleta import P
 from .screens.alcance import AlcanceScreen, sugerencia_desde
+from .screens.ayuda import AyudaScreen
 from .screens.cobertura import CoberturaScreen
 from .screens.codec import ConversorScreen
 from .screens.comparar import CompararScreen
@@ -88,31 +89,46 @@ class LuzxferApp(App):
         return {**super().get_css_variables(), **propias}
     TITLE = "luzxfer"
 
+    # El pie solo puede pintar una fila, y Textual descarta en silencio
+    # lo que no cabe: con veinte atajos a ochenta columnas se veian
+    # siete, y las funciones que mas costaron eran las invisibles. Asi
+    # que en el pie se queda lo que se usa a diario, y `?` abre la lista
+    # completa. Todos siguen activos y todos siguen siendo
+    # configurables: `show` decide que se pinta, no que funciona.
     BINDINGS = [
-        Binding("q", "quit", "salir", id="salir"),
+        Binding("question_mark", "ayuda", "teclas", id="ayuda"),
         Binding("r", "repeater", "repeater", id="repeater"),
-        Binding("s", "sesiones", "sesiones", id="sesiones"),
-        Binding("i", "intruder", "intruder", id="intruder"),
-        Binding("a", "alcance", "alcance", id="alcance"),
-        Binding("e", "mapa", "mapa del sitio", id="mapa"),
         Binding("x", "interceptar", "interceptar", id="interceptar"),
-        Binding("b", "barrido", "barrido activo", id="barrido"),
-        Binding("w", "cobertura", "cobertura WSTG", id="cobertura"),
-        Binding("f", "foco_filtro", "filtrar", id="foco_filtro"),
-        Binding("slash", "buscar", "buscar en todo", id="buscar"),
-        Binding("d", "conversor", "conversor", id="conversor"),
-        Binding("y", "comparar", "comparar marcados", id="comparar"),
-        Binding("m", "marcar", "marcar", id="marcar"),
-        Binding("n", "nota", "nota", id="nota"),
-        Binding("v", "confirmar", "confirmar", id="confirmar"),
-        Binding("t", "vista", "vista", id="vista"),
-        Binding("p", "cuerpo", "crudo/bonito", id="cuerpo"),
-        Binding("c", "limpiar", "limpiar", id="limpiar"),
-        Binding("g", "arriba", "inicio", show=False, id="arriba"),
-        Binding("G", "abajo", "final", show=False, id="abajo"),
-        Binding("j", "cursor_abajo", "abajo", show=False, id="cursor_abajo"),
-        Binding("k", "cursor_arriba", "arriba", show=False, id="cursor_arriba"),
-        Binding("escape", "quitar_foco", "", show=False, id="quitar_foco"),
+        Binding("slash", "buscar", "buscar", id="buscar"),
+        Binding("w", "cobertura", "cobertura", id="cobertura"),
+        Binding("q", "quit", "salir", id="salir"),
+
+        # activos, pero fuera del pie: se descubren con `?`
+        Binding("s", "sesiones", "cambiar de sesion",
+                show=False, id="sesiones"),
+        Binding("i", "intruder", "intruder", show=False, id="intruder"),
+        Binding("a", "alcance", "alcance", show=False, id="alcance"),
+        Binding("e", "mapa", "mapa del sitio", show=False, id="mapa"),
+        Binding("b", "barrido", "barrido activo (DAST)",
+                show=False, id="barrido"),
+        Binding("f", "foco_filtro", "filtrar el historial",
+                show=False, id="foco_filtro"),
+        Binding("d", "conversor", "conversor", show=False, id="conversor"),
+        Binding("y", "comparar", "comparar los dos marcados",
+                show=False, id="comparar"),
+        Binding("m", "marcar", "marcar", show=False, id="marcar"),
+        Binding("n", "nota", "nota", show=False, id="nota"),
+        Binding("v", "confirmar", "confirmar un candidato",
+                show=False, id="confirmar"),
+        Binding("t", "vista", "cambiar de vista", show=False, id="vista"),
+        Binding("p", "cuerpo", "crudo / bonito", show=False, id="cuerpo"),
+        Binding("c", "limpiar", "limpiar el filtro", show=False, id="limpiar"),
+        Binding("g", "arriba", "al principio", show=False, id="arriba"),
+        Binding("G", "abajo", "al final", show=False, id="abajo"),
+        Binding("j", "cursor_abajo", "bajar", show=False, id="cursor_abajo"),
+        Binding("k", "cursor_arriba", "subir", show=False, id="cursor_arriba"),
+        Binding("escape", "quitar_foco", "quitar el foco",
+                show=False, id="quitar_foco"),
     ]
 
     def __init__(
@@ -655,6 +671,26 @@ class LuzxferApp(App):
 
     def action_quitar_foco(self) -> None:
         self.query_one("#flujos", DataTable).focus()
+
+    def atajos(self) -> list[tuple[str, str, str]]:
+        """(id, tecla, descripcion) de los atajos de esta pantalla.
+
+        Sale de los atajos activos, no de la lista escrita en BINDINGS,
+        porque son cosas distintas en cuanto alguien remapea una tecla
+        en su `config.ini`: lo que hay que ensenarle es la suya.
+        """
+        salida: list[tuple[str, str, str]] = []
+        vistos: set[str] = set()
+        for activo in self.active_bindings.values():
+            b = activo.binding
+            if not b.id or b.id in vistos or not b.description:
+                continue
+            vistos.add(b.id)
+            salida.append((b.id, b.key, b.description))
+        return salida
+
+    def action_ayuda(self) -> None:
+        self.push_screen(AyudaScreen(self.atajos()))
 
     def action_repeater(self) -> None:
         if self._flujo_actual is None:

@@ -5,6 +5,43 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [0.6.1] — 2026-11-01
+
+### Corregido
+- **El pie de la pantalla recortaba trece de veinte atajos sin avisar.**
+  Textual solo pinta una fila y descarta en silencio lo que no cabe: a
+  ochenta columnas —el ancho de cualquier terminal, y el único que hay en
+  Termux— se veían siete. Interceptar, el barrido, la cobertura, el
+  conversor, comparar, marcar, la nota y confirmar no aparecían nunca.
+  Como no hay flecha ni puntos suspensivos, no había forma de notar que
+  faltaban: las funciones que más costaron eran justo las invisibles.
+  - El pie se queda con seis —`?`, `r`, `x`, `/`, `w`, `q`— y cabe entero
+    a ochenta columnas. Hay un test que lo comprueba a 80, 100 y 140.
+  - Apretar más teclas en el pie no era la solución: a ningún ancho caben
+    las veinticuatro.
+- El roadmap del README marcaba *Interceptar y editar en vuelo* como
+  pendiente, con la función implementada y documentada doce secciones más
+  arriba en el mismo archivo. Quien bajara al roadmap concluía que faltaba
+  lo que más trabajo había costado.
+- `-H/--host` no estaba documentado. Es la única bandera que saca el proxy
+  de loopback, y la sección de seguridad advertía sobre ello sin nombrarla,
+  así que no se podía saber qué no había que tocar.
+
+### Añadido
+- **Pantalla de ayuda (`?`)**: las veinticuatro teclas agrupadas por para
+  qué sirven —moverse, herramientas, el flujo elegido, la sesión—. Se
+  construye de los atajos **activos**, no de una lista escrita a mano: una
+  ayuda mantenida aparte del código se desincroniza en el primer cambio y
+  entonces es peor que no tenerla, porque manda a probar teclas muertas.
+  Si remapeaste un atajo en tu `config.ini`, ahí sale el tuyo.
+  - Traduce los nombres de Textual a los del teclado: `slash` sale como
+    `/`, `escape` como `esc`.
+  - Un atajo que nadie clasificó aparece igual, al final, bajo «otros»:
+    perderlo ahí sería repetir el fallo del pie, solo que más escondido.
+    Hay un test que falla si alguien añade una tecla y no la coloca.
+- `ayuda` es una acción configurable más, como el resto.
+- `esc` (devolver el foco al historial) está documentado por primera vez.
+
 ## [0.4.0] — 2026-11-01
 
 ### Añadido
