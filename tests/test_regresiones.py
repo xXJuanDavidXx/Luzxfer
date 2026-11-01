@@ -506,3 +506,88 @@ def test_una_peticion_sin_validadores_no_cambia(eco):
     datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
                             b"X-Propia: valor\r\nConnection: close\r\n\r\n")
     assert any(k == "X-Propia" and v == "valor" for k, v in datos["cabeceras"])
+
+
+# --------------------------- 8. el cableado entre la app y el motor
+def _pedir_por(puerto: int, extra: bytes) -> dict:
+    """Una peticion por el proxy, desde un hilo aparte.
+
+    Tiene que ir en otro hilo: _manejar() llama a _emitir() ANTES de
+    escribir la respuesta, y _emitir salta al bucle de la interfaz con
+    call_from_thread. Si el test leyera el socket desde ese mismo bucle,
+    las dos partes se esperarian para siempre.
+    """
+    import socket
+    s = socket.create_connection(("127.0.0.1", puerto), timeout=10)
+    s.sendall(b"GET /eco HTTP/1.1\r\nHost: x\r\n" + extra +
+              b"Connection: close\r\n\r\n")
+    r = http.client.HTTPResponse(s)
+    r.begin()
+    cuerpo = r.read()
+    s.close()
+    return json.loads(cuerpo)
+
+
+async def test_la_app_arranca_el_motor_con_sus_banderas(eco):
+    """Humo del camino de verdad: LuzxferApp.arrancar() construyendo el
+    Builtin, que es lo que ocurre al abrir luzxfer.
+
+    OJO con lo que este test NO prueba. Comprobado borrando
+    `filtrar_cache=self.filtrar_cache` de arrancar(): este test SIGUE
+    PASANDO, porque Builtin tiene filtrar_cache=True por defecto y el
+    defecto disimula la bandera que falta. El que de verdad prueba el
+    cableado es el siguiente, con las banderas en False.
+
+    Se queda porque sirve de humo —que el motor arranca, escucha y
+    reenvia por el camino real— pero no como red contra un cable suelto.
+    """
+    import asyncio
+
+    h, p = eco
+    app = LuzxferApp(upstream=f"http://{h}:{p}", port=0, arrancar_motor=True)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.engine is not None and app.engine.running
+        puerto = app.engine._srv.server_address[1]
+
+        datos = await asyncio.to_thread(
+            _pedir_por, puerto,
+            b'If-None-Match: W/"abc"\r\n'
+            b"If-Modified-Since: Sat, 31 Oct 2026 21:45:30 GMT\r\n"
+            b"Accept-Encoding: gzip, deflate, br, zstd\r\n",
+        )
+
+    vistas = {k.lower(): v for k, v in datos["cabeceras"]}
+    assert "if-none-match" not in vistas, "la app no le paso filtrar_cache al motor"
+    assert "if-modified-since" not in vistas
+    assert "br" not in vistas.get("accept-encoding", ""), \
+        "la app no le paso filtrar_encoding al motor"
+
+
+async def test_la_app_respeta_que_le_pidan_no_filtrar(eco):
+    """Este es el que prueba el cableado de verdad.
+
+    Con las banderas en False, el defecto del motor no puede disimular:
+    si arrancar() no las pasa, el motor filtra igualmente y el test cae.
+    Comprobado borrando esa linea: este test falla y los otros 235 no.
+
+    Y el fallo que atrapa es el peor de los dos. Si el cable se suelta,
+    las banderas vuelven a su defecto —filtrar— asi que nadie ve 304s y
+    todo parece bien; lo que se rompe en silencio es --conservar-cache,
+    o sea probar envenenamiento de cache creyendo que las cabeceras
+    viajan cuando no viajan."""
+    import asyncio
+
+    h, p = eco
+    app = LuzxferApp(upstream=f"http://{h}:{p}", port=0, arrancar_motor=True,
+                     filtrar_cache=False, filtrar_encoding=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        puerto = app.engine._srv.server_address[1]
+        datos = await asyncio.to_thread(
+            _pedir_por, puerto,
+            b'If-None-Match: W/"abc"\r\nAccept-Encoding: gzip, br\r\n')
+
+    vistas = {k.lower(): v for k, v in datos["cabeceras"]}
+    assert "if-none-match" in vistas
+    assert "br" in vistas.get("accept-encoding", "")
