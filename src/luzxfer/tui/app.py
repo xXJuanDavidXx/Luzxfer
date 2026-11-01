@@ -31,6 +31,7 @@ from . import paleta, teclas
 from .paleta import P
 from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.cobertura import CoberturaScreen
+from .screens.codec import ConversorScreen
 from .screens.intercepta import InterceptaScreen
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
@@ -98,6 +99,7 @@ class LuzxferApp(App):
         Binding("w", "cobertura", "cobertura WSTG", id="cobertura"),
         Binding("f", "foco_filtro", "filtrar", id="foco_filtro"),
         Binding("slash", "buscar", "buscar en todo", id="buscar"),
+        Binding("d", "conversor", "conversor", id="conversor"),
         Binding("m", "marcar", "marcar", id="marcar"),
         Binding("n", "nota", "nota", id="nota"),
         Binding("v", "confirmar", "confirmar", id="confirmar"),
@@ -695,6 +697,14 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         self.actualizar_estado()
         return errores
+
+    def action_conversor(self) -> None:
+        """Abre el conversor con lo mas prometedor del flujo ya dentro."""
+        from ..core.tools import codec as _codec
+        texto = origen = ""
+        if self._flujo_actual is not None:
+            texto, origen = _codec.candidato(self._flujo_actual)
+        self.push_screen(ConversorScreen(texto, origen))
 
     def action_cobertura(self) -> None:
         self.push_screen(CoberturaScreen())

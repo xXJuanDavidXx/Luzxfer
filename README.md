@@ -98,6 +98,7 @@ ignorado.
 | `j` / `k` o flechas | moverse por el historial |
 | `f` | filtrar por url |
 | `/` | buscar en url, cabeceras y cuerpos |
+| `d` | conversor: base64, url, hex, html, JWT |
 | `r` | abrir el repeater sobre el flujo seleccionado |
 | `i` | abrir el Intruder sobre el flujo seleccionado |
 | `t` | petición y respuesta lado a lado, y volver |
@@ -119,6 +120,37 @@ ignorado.
 en dos columnas en vez de dos pestañas, como Burp deja distribuirlas. La
 pestaña de candidatos sigue alcanzable en los dos modos, y la elección se
 recuerda con la sesión.
+
+### Conversor
+
+`d` abre el conversor, y **no vacío**: busca en la petición el valor más
+prometedor —un JWT en `Authorization`, una cookie, un parámetro que
+parezca codificado— y lo trae ya dentro, diciendo de dónde salió.
+Abrirlo vacío obliga a copiar a mano justo lo que la herramienta tiene
+delante.
+
+En vez de pedirte que elijas un formato a ciegas, enseña **qué podría
+ser** el texto:
+
+```
+conversor  ·  de Authorization   ctrl+e codifica (base64) · esc cierra
+
+── jwt ──
+--- cabecera ---          --- cuerpo ---
+{                         {
+  "alg": "HS256",           "sub": "admin",
+  "typ": "JWT"              "rol": "administrador"
+}                         }
+
+La firma NO se comprueba: esto solo abre el token.
+```
+
+Una interpretación solo se ofrece si el resultado **se puede leer** y
+**cambia algo**. Decir que algo es base64 cuando al abrirlo sale basura
+binaria manda a perseguir un fantasma, y una lista que siempre tiene
+opciones no informa: si no se reconoce nada, lo dice.
+
+`ctrl+e` codifica, recorriendo base64, url, hex y html.
 
 ### Buscar
 

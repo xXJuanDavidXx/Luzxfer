@@ -366,3 +366,18 @@ Button.-primary:hover {
 #cob-tabla { height: 1fr; }
 
 #cob-aviso { height: 2; margin-top: 1; }
+
+/* conversor */
+#cod-caja {
+    width: 80%;
+    height: 80%;
+    background: $lx-modal;
+    border: round $lx-acento;
+    padding: 1 2;
+}
+
+#cod-titulo { height: 1; margin-bottom: 1; }
+
+#cod-entrada { height: 30%; }
+
+#cod-scroll { height: 1fr; margin-top: 1; }

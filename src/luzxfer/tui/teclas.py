@@ -28,7 +28,7 @@ ACCIONES = {
     "salir", "repeater", "intruder", "sesiones", "alcance", "mapa",
     "interceptar", "barrido", "cobertura", "marcar", "nota",
     "confirmar", "vista", "cuerpo", "limpiar", "arriba", "abajo",
-    "foco_filtro", "buscar",
+    "foco_filtro", "buscar", "conversor",
     "cursor_abajo", "cursor_arriba", "quitar_foco",
 }
 

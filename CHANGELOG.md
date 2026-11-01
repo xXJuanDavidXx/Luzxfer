@@ -58,6 +58,12 @@ experiencia de quien ya usaba la herramienta.
 ## [No publicado]
 
 ### Añadido
+- **Conversor** (`d`): base64, url, hex, entidades HTML y JWT. Enseña qué
+  podría ser el texto en vez de pedir el formato a ciegas, y se abre con
+  el token más prometedor de la petición ya dentro.
+  - Solo ofrece una interpretación si el resultado se puede leer y
+    cambia algo; si no reconoce nada, lo dice.
+  - Al abrir un JWT avisa de que la firma **no** se comprueba.
 - **Buscar en todo el tráfico** (`/`): url, cabeceras y cuerpos, de la
   petición y de la respuesta. Descomprime para buscar, porque un `LIKE`
   de SQL no encuentra nada dentro de un gzip y parecería funcionar.
