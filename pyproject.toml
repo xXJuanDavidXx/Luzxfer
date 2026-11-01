@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "luzxfer"
-version = "0.4.0"
+version = "0.5.0"
 description = "Intercepting proxy and web pentesting workbench for the terminal"
 readme = "README.md"
 requires-python = ">=3.10"

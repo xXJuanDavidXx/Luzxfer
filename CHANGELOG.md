@@ -57,6 +57,10 @@ experiencia de quien ya usaba la herramienta.
 
 ## [No publicado]
 
+Nada todavía.
+
+## [0.5.0] — 2026-11-01
+
 ### Corregido
 - **El coste por flujo volvía a crecer con el historial.** `move_cursor`
   al seguir el tráfico costaba el 94 % del tiempo de ingerir un flujo y
@@ -177,6 +181,8 @@ candidatos con IDs de la WSTG, y repeater por socket crudo.
 Revisión posterior con siete fallos reales corregidos, cada uno con su test
 de regresión escrito primero.
 
+[0.5.0]: https://github.com/xXJuanDavidXx/Luzxfer/releases/tag/v0.5.0
+[0.4.0]: https://github.com/xXJuanDavidXx/Luzxfer/releases/tag/v0.4.0
 [0.3.0]: https://github.com/xXJuanDavidXx/Luzxfer/releases/tag/v0.3.0
 [0.2.0]: https://github.com/xXJuanDavidXx/Luzxfer/releases/tag/v0.2.0
 [0.1.0]: https://github.com/xXJuanDavidXx/Luzxfer/releases/tag/v0.1.0

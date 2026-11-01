@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Bitácora de avance de **luzxfer 0.3.0**. Última verificación: **2026-11-01**.
+Bitácora de avance de **luzxfer 0.5.0**. Última verificación: **2026-11-01**.
 
 Este archivo dice en qué punto está la herramienta de verdad: qué está hecho y
 comprobado, qué está a medias, y qué falta. No repite el README (qué es la
@@ -15,9 +15,9 @@ Todo esto se corrió en esta máquina, no es recuerdo de la última sesión:
 
 | comprobación | resultado |
 | --- | --- |
-| `./venv/bin/python -m pytest` | **248 pasan**, ~53 s, sin fallos ni saltados |
+| `./venv/bin/python -m pytest` | **479 pasan**, 1 saltado, ~2 min |
 | `./venv/bin/ruff check src tests` | **limpio**, `All checks passed!` |
-| `luzxfer --version` | `luzxfer 0.3.0` |
+| `luzxfer --version` | `luzxfer 0.5.0` |
 | sesiones, de punta a punta | 7 flujos, salir, volver sin argumentos, 7 flujos |
 | brotli, contra Juice Shop real | `br` ilegible → `gzip` legible al filtrar |
 | vista combinada | izquierda x=2 ancho 66, derecha x=72 ancho 66 |
@@ -26,6 +26,25 @@ Todo esto se corrió en esta máquina, no es recuerdo de la última sesión:
 sistema tiene pytest pero no textual, y el venv tiene las dos cosas.
 
 ---
+
+## Prueba de conjunto (2026-11-01)
+
+Contra OWASP Juice Shop, con la herramienta entera y no por piezas:
+
+```
+capturado: 5 flujos, 2 candidatos
+codigos vistos: [200]        <- los validadores de cache fuera, sin 304
+codificaciones: ['br']       <- y brotli leido, no recortado
+JSON reorganizado: si
+barrido: 10 peticiones, 1 hallazgo
+   [WSTG-INPV-05] error de SQL al romper la comilla en 'q'
+mapa: 1 host, 5 rutas distintas
+informe: 198 lineas de Markdown
+```
+
+El informe encontró una SQLi real **y aun así la lista como candidato**,
+con la cobertura en 0,0 %, porque nadie la ha confirmado. Esa es la
+disciplina que el proyecto se propuso desde el principio.
 
 ## Qué cambió en la 0.3.0
 
