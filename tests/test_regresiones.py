@@ -172,7 +172,7 @@ async def test_el_repeater_no_congela_la_interfaz(eco):
         await pilot.pause()
         app.query_one("#flujos", DataTable).move_cursor(row=0)
         await pilot.pause()
-        await pilot.press("r")
+        await pilot.press("R")
         await pilot.pause()
 
         from textual.widgets import Button
@@ -200,7 +200,7 @@ async def test_flujos_del_repeater_pasan_por_el_detector(eco):
         await pilot.pause()
         app.query_one("#flujos", DataTable).move_cursor(row=0)
         await pilot.pause()
-        await pilot.press("r")
+        await pilot.press("R")
         await pilot.pause()
         from textual.widgets import Button
         app.screen.editor_actual().text = (
@@ -239,7 +239,7 @@ async def test_respuestas_largas_se_pueden_desplazar():
         assert panel.max_scroll_y > 0
 
         # salida del repeater, ahora por pestaña
-        await pilot.press("r")
+        await pilot.press("R")
         await pilot.pause()
         rid = app.screen.pestanas()[0]
         app.screen._mostrar(rid, largo)

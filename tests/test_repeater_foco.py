@@ -30,7 +30,7 @@ async def _abrir(pilot, app):
     await pilot.pause()
     app.query_one("#flujos", DataTable).move_cursor(row=0)
     await pilot.pause()
-    await pilot.press("r")
+    await pilot.press("R")
     await pilot.pause()
     assert isinstance(app.screen, RepeaterScreen)
     return app.screen

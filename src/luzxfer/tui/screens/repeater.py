@@ -39,6 +39,7 @@ class RepeaterScreen(ModalScreen):
         Binding("escape", "cerrar", "cerrar"),
         Binding("ctrl+s", "enviar", "enviar", priority=True),
         Binding("ctrl+w", "cerrar_pestana", "cerrar pestaña", priority=True),
+        Binding("ctrl+f", "formatear", "formatear JSON", priority=True),
         Binding("ctrl+r", "alternar_saltos", "seguir redirecciones",
                 priority=True),
     ]
@@ -57,6 +58,7 @@ class RepeaterScreen(ModalScreen):
             yield TabbedContent(id="rep-tabs")
             with Horizontal(id="rep-barra"):
                 yield Button("enviar", variant="primary", id="rep-enviar")
+                yield Button("formatear JSON", id="rep-formatear")
                 yield Button("cerrar", id="rep-cerrar")
 
     def on_mount(self) -> None:
@@ -103,8 +105,8 @@ class RepeaterScreen(ModalScreen):
                 # el foco se queda en el editor y no hay forma de
                 # desplazarla
                 ("   tab editor/respuesta · ctrl+s enviar · "
-                 "ctrl+w cerrar pestaña · ctrl+r redirecciones · "
-                 "esc cerrar", P.tenue),
+                 "ctrl+f formatear JSON · ctrl+w cerrar pestaña · "
+                 "ctrl+r redirecciones · esc cerrar", P.tenue),
             )
         )
 
@@ -223,9 +225,20 @@ class RepeaterScreen(ModalScreen):
         partes.append((texto, P.cuerpo))
         salida.update(Text.assemble(*partes))
 
+    def action_formatear(self) -> None:
+        ed = self.editor_actual()
+        if ed is None:
+            return
+        nuevo, nota = fmt.formatear_cuerpo_crudo(ed.text)
+        if nuevo != ed.text:
+            ed.text = nuevo
+        self.notify(nota, timeout=4)
+
     def on_button_pressed(self, ev: Button.Pressed) -> None:
         if ev.button.id == "rep-enviar":
             self.action_enviar()
+        elif ev.button.id == "rep-formatear":
+            self.action_formatear()
         elif ev.button.id == "rep-cerrar":
             self.action_cerrar()
 

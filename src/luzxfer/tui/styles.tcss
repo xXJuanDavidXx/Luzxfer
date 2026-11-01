@@ -136,6 +136,13 @@ RepeaterScreen {
     padding: 1 2;
 }
 
+/* Sin acotar las pestañas, el TabbedContent crece con su contenido y
+   empuja la barra de botones FUERA de la caja: se dibujaban una fila por
+   debajo del borde, asi que no habia forma de pulsarlos con el raton. */
+#rep-tabs {
+    height: 1fr;
+}
+
 #rep-titulo {
     color: $lx-acento;
     text-style: bold;
@@ -430,3 +437,37 @@ Button.-primary:hover {
 #exp-texto { height: 1fr; border: round $lx-borde; }
 
 #exp-avisos { height: auto; margin-top: 1; }
+
+/* detalle de un resultado del intruder */
+#det-caja {
+    width: 90%;
+    height: 80%;
+    background: $lx-modal;
+    border: round $lx-acento;
+    padding: 1 2;
+}
+
+#det-titulo { height: 1; margin-bottom: 1; }
+
+#det-peticion { height: 1fr; border: round $lx-borde; }
+
+/* cargar payloads en el intruder */
+#pay-caja {
+    width: 80;
+    max-width: 96%;
+    height: auto;
+    background: $lx-modal;
+    border: round $lx-acento;
+    padding: 1 2;
+}
+
+#pay-titulo { margin-bottom: 1; }
+
+.pay-fila { height: 3; margin-bottom: 1; }
+
+/* los cuatro campos del rango estrechos para que el boton no se salga
+   por la derecha: si no cabe en pantalla, el raton tampoco lo alcanza */
+#pay-desde, #pay-hasta, #pay-paso, #pay-ancho { width: 12; }
+#pay-ruta { width: 1fr; }
+
+#pay-aviso { height: auto; color: $lx-peligro; }

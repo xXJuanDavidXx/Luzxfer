@@ -256,3 +256,24 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   exportado habría pasado con ese fallo dentro. Lo que exporta la
   herramienta se prueba **ejecutándolo**, no mirándolo. Vale para el curl
   de hoy y para cualquier otro formato que salga de aquí.
+- **2026-11-01** — Ergonomía de Repeater e Intruder, del feedback del
+  usuario, con plan escrito en `docs/superpowers/plans/`. Dos decisiones
+  que merecen quedar:
+  **`r` abre, `R` envia; el Intruder no gana `I`.** Minuscula abre la
+  herramienta, mayuscula le manda el flujo. El Repeater tiene banco de
+  pestañas, asi que abrir y enviar son cosas distintas; el Intruder ataca
+  una sola peticion y no tiene estado vacio que abrir, asi que forzar un
+  `I` gemelo seria simetria por la simetria. La asimetria es la respuesta
+  honesta.
+  **Mitad del Intruder ya existia.** `desde_archivo`, `desde_rango`,
+  `conjuntos_desde_texto`, `sustituir` estaban en core y probados. El
+  trabajo fue interfaz, no logica: detalle de cada resultado reconstruido
+  con `sustituir` (gratis y exacto, en vez de retener cuerpos que un
+  ataque de un millon no puede guardar), y un cargador de payloads que
+  llama a lo que ya habia.
+  **Lo que volvio a aparecer: la interfaz que miente por maquetacion.** La
+  barra del repeater y la fila del rango del intruder dibujaban sus
+  botones fuera de la caja; los atajos funcionaban, asi que los tests de
+  teclado no lo veian. Ahora hay tests que miden que los botones caen
+  dentro. Un boton que no se puede pulsar es el mismo fallo que un atajo
+  que el pie no muestra: existe y no se alcanza.

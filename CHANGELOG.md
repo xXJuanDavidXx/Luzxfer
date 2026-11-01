@@ -5,7 +5,28 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
-## [Sin publicar]
+## [0.8.0] — 2026-11-01
+
+Ergonomía de Repeater e Intruder, a partir del feedback del usuario.
+
+### Añadido
+- **`r` abre el repeater y `R` le manda el flujo seleccionado.** Antes `r`
+  abría el banco metiendo dentro la petición marcada, que impedía mirarlo
+  sin ensuciarlo. Abrir y enviar pasan a ser dos gestos. El Intruder no
+  gana tecla gemela: ataca una sola petición y no tiene banco que abrir en
+  vacío, así que `i` sigue abriendo sobre la marcada.
+- **Formatear el cuerpo JSON en el repeater** con `ctrl+f` o un botón. Solo
+  toca el cuerpo, nunca las cabeceras, y solo si es JSON válido; si no, lo
+  dice y no toca nada. El `Content-Length` lo recalcula el envío, así que
+  formatear no descuadra la petición.
+- **El Intruder muestra la petición de cada resultado** al pulsar `enter`
+  sobre su fila, reconstruida con la misma función que usó el ataque: es lo
+  que viajó, no una aproximación. La respuesta no se guarda por fila a
+  propósito (memoria acotada); para el cuerpo entero, se manda al repeater.
+- **Cargar payloads desde la interfaz** (`ctrl+y` o botón «cargar»): un
+  diccionario desde un archivo o un rango numérico de A a B, con paso y
+  relleno de ceros. Lo cargado se añade a lo que ya haya. Los errores de
+  ruta o de rango se avisan sin cerrar nada.
 
 ### Corregido
 - **En el repeater «a veces no se veía la respuesta completa, se cortaba
@@ -22,6 +43,12 @@ experiencia de quien ya usaba la herramienta.
   - Ahora los widgets llevan clases, las reglas enganchan, el panel con
     el foco se ve distinto y la pista del título empieza por
     `tab editor/respuesta`.
+- **La barra de botones del repeater se dibujaba fuera del recuadro** (una
+  fila por debajo del borde): los atajos funcionaban, pero los botones no
+  se podían pulsar con el ratón. Faltaba acotar el alto de las pestañas.
+- **La fila del rango del Intruder desbordaba a lo ancho** y empujaba su
+  botón fuera de la pantalla. Los campos se estrechan; hay tests que
+  comprueban que los botones de ambas pantallas caen dentro de su caja.
 
 ## [0.7.0] — 2026-11-01
 

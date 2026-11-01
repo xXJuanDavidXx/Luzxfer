@@ -116,7 +116,8 @@ responde.
 | `f` | filtrar por url |
 | `/` | buscar en url, cabeceras y cuerpos |
 | `d` | conversor: base64, url, hex, html, JWT |
-| `r` | abrir el repeater sobre el flujo seleccionado |
+| `r` | abrir el repeater (el banco de trabajo, con sus pestañas) |
+| `R` | mandar el flujo seleccionado al repeater, en pestaña nueva |
 | `i` | abrir el Intruder sobre el flujo seleccionado |
 | `t` | petición y respuesta lado a lado, y volver |
 | `p` | alternar entre el cuerpo reorganizado y el crudo |
@@ -267,16 +268,25 @@ servidor dijo JSON y mandó algo que no lo es, queda dicho encima.
 
 ### Repeater
 
-`r` abre el repeater sobre el flujo seleccionado, **en una pestaña nueva**.
+**`r` abre el banco de trabajo; `R` le manda el flujo seleccionado** en una
+pestaña nueva. Son dos gestos distintos a propósito: abrir el repeater para
+mirar lo que ya tienes no debería ensuciarlo con la petición que estuviera
+bajo el cursor. La combinación sirve igual que seleccionar y pulsar.
 
 ```
-ctrl+s enviar · ctrl+w cerrar pestaña · ctrl+r seguir redirecciones · esc cerrar
+tab editor/respuesta · ctrl+s enviar · ctrl+f formatear JSON · ctrl+w cerrar pestaña · ctrl+r seguir redirecciones · esc cerrar
 ```
 
 **Las pestañas sobreviven a cerrar la pantalla y a cerrar la herramienta.**
 Una petición que has pasado veinte minutos afinando es justo lo que no se
 puede perder. Se guarda la petición y no la respuesta: lo que cuesta es lo
 que escribiste tú, y la respuesta se vuelve a pedir en un segundo.
+
+`tab` mueve el foco entre el editor y el panel de respuesta: una respuesta
+más alta que el panel se desplaza desde ahí. `ctrl+f` (o el botón «formatear
+JSON») reorganiza el cuerpo JSON de la petición para leerlo — solo el
+cuerpo, nunca las cabeceras, y solo si de verdad es JSON válido; si no, te
+lo dice y no toca nada.
 
 `ctrl+r` alterna seguir redirecciones, hasta cinco. Por defecto **no las
 sigue**, igual que el proxy: un `30x` se enseña tal como lo mandó el
@@ -303,7 +313,8 @@ nunca congela la pantalla.
 
 ```
 ctrl+m   envolver la selección (o la palabra bajo el cursor) en §
-ctrl+l   lanzar       ctrl+x   abortar       ctrl+o   ordenar por largo
+ctrl+y   cargar payloads     ctrl+l   lanzar     ctrl+x   abortar
+ctrl+o   ordenar por largo   enter    ver la petición de una fila
 ```
 
 Los marcadores son `§`, como en Burp, para que una petición copiada de allí
@@ -321,7 +332,20 @@ inserta y nunca hace falta escribirlo.
 
 En el cuadro de payloads, una línea con `---` separa un conjunto del
 siguiente, y una línea que empieza por `@` es la ruta de un archivo de
-payloads: pegar rockyou a mano no es viable.
+payloads: pegar una lista entera a mano no es viable.
+
+**`ctrl+y` (o el botón «cargar») trae los payloads sin teclearlos:** un
+diccionario desde un archivo, o un rango numérico de A a B con paso y
+relleno de ceros opcional — para IDs tipo `00042`. Lo cargado se añade a lo
+que ya haya en el cuadro. Una ruta que no existe o un rango al revés se
+avisan y dejan corregir, sin cerrar nada.
+
+**Cada fila de resultados abre su petición con `enter`.** Ver que una mide
+distinto no basta: hay que poder mirar qué se mandó. La petición se
+reconstruye con la misma función que usó el ataque, así que es lo que
+viajó, no una aproximación. La respuesta no se guarda por fila a propósito —
+un ataque de un millón no puede retener un millón de cuerpos en memoria —;
+para ver el cuerpo entero de un caso, manda esa petición al repeater.
 
 **Ordenar por largo (`ctrl+o`) es el gesto central**, no un adorno. En un
 fuzzing de credenciales o de IDOR lo que delata el acierto casi nunca es el
@@ -771,6 +795,7 @@ desde otra máquina, haz un túnel por SSH en vez de cambiar el host.
 - [x] API de plugins
 - [x] Personalización: temas, colores y atajos configurables
 - [x] Exportar a `curl` y en crudo
+- [x] Intruder: cargar diccionario y rango, ver el detalle de cada resultado
 
 `docs/direccion.md` tiene el razonamiento detrás de ese orden, y por qué la
 IA está aplazada en vez de planificada.
