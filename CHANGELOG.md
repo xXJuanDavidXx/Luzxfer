@@ -5,6 +5,17 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Añadido
+- **Mandar un resultado del Intruder al repeater** (`ctrl+r` o botón, desde
+  el detalle de una fila). Cierra el bucle que ya prometian el detalle y la
+  documentacion: el Intruder enseña que salio en cada fila pero no retiene
+  la respuesta por memoria, asi que para verla entera se manda esa peticion
+  —con el payload ya puesto— al repeater, donde se afina y se mira. La
+  pestaña hereda el TLS correcto: una peticion https reenviada en claro al
+  443 falla raro en vez de fallar claro.
+
 ## [0.8.1] — 2026-11-01
 
 ### Corregido

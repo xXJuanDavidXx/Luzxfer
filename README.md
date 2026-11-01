@@ -345,7 +345,9 @@ distinto no basta: hay que poder mirar qué se mandó. La petición se
 reconstruye con la misma función que usó el ataque, así que es lo que
 viajó, no una aproximación. La respuesta no se guarda por fila a propósito —
 un ataque de un millón no puede retener un millón de cuerpos en memoria —;
-para ver el cuerpo entero de un caso, manda esa petición al repeater.
+para ver el cuerpo entero de un caso, **`ctrl+r` (o el botón) manda esa
+petición al repeater**, que hereda el TLS correcto, y allí se afina y se
+mira la respuesta completa.
 
 **Ordenar por largo (`ctrl+o`) es el gesto central**, no un adorno. En un
 fuzzing de credenciales o de IDOR lo que delata el acierto casi nunca es el

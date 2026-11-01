@@ -124,3 +124,94 @@ async def test_elegir_fila_sin_ataque_no_rompe():
         tabla.focus()
         await pilot.pause()
         assert isinstance(app.screen, IntruderScreen)
+
+
+# --------------------------------------- mandar un resultado al repeater
+async def test_mandar_al_repeater_crea_una_repeticion():
+    """Cierra el bucle que promete el detalle: del resultado al repeater,
+    donde se ve la respuesta entera que el Intruder no retiene por fila."""
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        pant = await _intruder_con_un_resultado(pilot, app, payload="admin")
+        antes = len(app.store.list_repeticiones())
+        tabla = pant.query_one("#int-resultados", DataTable)
+        tabla.focus()
+        tabla.move_cursor(row=0)
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, DetalleResultadoScreen)
+
+        await pilot.press("ctrl+r")
+        await pilot.pause()
+        reps = app.store.list_repeticiones()
+        assert len(reps) == antes + 1
+        # la peticion guardada lleva el payload puesto
+        assert "admin" in reps[-1]["crudo"]
+        assert isinstance(app.screen, IntruderScreen), "vuelve al intruder"
+
+
+async def test_el_boton_manda_al_repeater():
+    from textual.widgets import Button
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        pant = await _intruder_con_un_resultado(pilot, app)
+        antes = len(app.store.list_repeticiones())
+        tabla = pant.query_one("#int-resultados", DataTable)
+        tabla.focus()
+        tabla.move_cursor(row=0)
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.click(app.screen.query_one("#det-repeater", Button))
+        await pilot.pause()
+        assert len(app.store.list_repeticiones()) == antes + 1
+
+
+async def test_cerrar_el_detalle_no_crea_repeticion():
+    """Solo mirar no manda nada: cerrar no debe ensuciar el repeater."""
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        pant = await _intruder_con_un_resultado(pilot, app)
+        antes = len(app.store.list_repeticiones())
+        tabla = pant.query_one("#int-resultados", DataTable)
+        tabla.focus()
+        tabla.move_cursor(row=0)
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert len(app.store.list_repeticiones()) == antes
+
+
+async def test_el_tls_se_hereda_en_la_repeticion():
+    """Una peticion https reenviada en claro al 443 falla raro. El TLS del
+    flujo original tiene que viajar a la pestaña del repeater."""
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        # flujo original https
+        app._ingresar(Flow(
+            request=Request(method="GET", url="https://o.com/x?q=1",
+                            headers=[("Host", "o.com")]),
+            response=Response(status=200, body=b"ok")))
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        await pilot.press("i")
+        await pilot.pause()
+        pant = app.screen
+        crudo = "GET /x?q=§X§ HTTP/1.1\r\nHost: o.com\r\n\r\n"
+        cfg = intruder.Config(modo=intruder.Modo.SNIPER, conjuntos=[["admin"]])
+        pant.ataque = intruder.Ataque(crudo, cfg)
+        r = intruder.Resultado(n=0, payloads=["admin"], status=200, largo=10)
+        pant._resultados[0] = r
+        pant._fila(r)
+        await pilot.pause()
+
+        tabla = pant.query_one("#int-resultados", DataTable)
+        tabla.focus()
+        tabla.move_cursor(row=0)
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("ctrl+r")
+        await pilot.pause()
+        assert app.store.list_repeticiones()[-1]["tls"], \
+            "el flujo era https: la repeticion tiene que ir por TLS"

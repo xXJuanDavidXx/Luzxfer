@@ -16,19 +16,25 @@ from __future__ import annotations
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Static, TextArea
+from textual.widgets import Button, Static, TextArea
 
 from ..paleta import P
 
 
-class DetalleResultadoScreen(ModalScreen):
-    """La peticion reconstruida de una fila, de solo lectura y seleccionable."""
+class DetalleResultadoScreen(ModalScreen[bool]):
+    """La peticion reconstruida de una fila, de solo lectura y seleccionable.
+
+    Devuelve True si se pide mandarla al repeater, False si solo se cierra.
+    El detalle enseña la peticion; el repeater es donde se afina y se ve la
+    respuesta entera, que aqui no se guarda.
+    """
 
     BINDINGS = [
         Binding("escape", "cerrar", "cerrar"),
         Binding("q", "cerrar", "cerrar"),
+        Binding("ctrl+r", "al_repeater", "mandar al repeater", priority=True),
     ]
 
     def __init__(self, titulo: str, peticion: str):
@@ -42,7 +48,7 @@ class DetalleResultadoScreen(ModalScreen):
                 Text.assemble(
                     ("detalle del resultado", f"bold {P.acento}"),
                     (f"   {self.titulo}", P.secundario),
-                    ("   esc cierra", P.tenue),
+                    ("   ctrl+r al repeater · esc cierra", P.tenue),
                 ),
                 id="det-titulo",
             )
@@ -50,6 +56,19 @@ class DetalleResultadoScreen(ModalScreen):
             # porque esto es evidencia de lo que salio, no un editor
             yield TextArea(self.peticion, id="det-peticion", soft_wrap=False,
                            read_only=True)
+            with Horizontal(id="det-barra"):
+                yield Button("mandar al repeater", variant="primary",
+                             id="det-repeater")
+                yield Button("cerrar", id="det-cerrar")
+
+    def on_button_pressed(self, ev: Button.Pressed) -> None:
+        if ev.button.id == "det-repeater":
+            self.action_al_repeater()
+        elif ev.button.id == "det-cerrar":
+            self.action_cerrar()
+
+    def action_al_repeater(self) -> None:
+        self.dismiss(True)
 
     def action_cerrar(self) -> None:
-        self.dismiss()
+        self.dismiss(False)

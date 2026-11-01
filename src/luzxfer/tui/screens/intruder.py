@@ -21,6 +21,7 @@ from textual.widgets import Button, DataTable, Input, Select, Static, TextArea
 from ...core.models import Flow
 from ...core.tools import intruder, repeater
 from ..paleta import P
+from . import repeater as repetidor
 from .intruder_detalle import DetalleResultadoScreen
 from .intruder_payloads import CargarPayloadsScreen
 
@@ -325,7 +326,30 @@ class IntruderScreen(ModalScreen):
         peticion = intruder.sustituir(self.ataque.crudo, r.payloads)
         cod = "ERR" if r.status is None else str(r.status)
         titulo = f"#{r.n} · {' / '.join(r.payloads)} · {cod} · {r.largo}B"
-        self.app.push_screen(DetalleResultadoScreen(titulo, peticion))
+
+        def _quizas_al_repeater(mandar: bool | None) -> None:
+            if mandar:
+                self._mandar_al_repeater(peticion)
+
+        self.app.push_screen(DetalleResultadoScreen(titulo, peticion),
+                             _quizas_al_repeater)
+
+    def _mandar_al_repeater(self, peticion: str) -> None:
+        """Guarda la peticion como una pestaña del repeater.
+
+        Cierra el bucle que prometen el detalle y la documentacion: aqui se
+        ve que salio, y en el repeater se afina y se mira la respuesta
+        entera, que el Intruder no retiene por fila.
+        """
+        # el TLS tiene que heredarse bien: una peticion https reenviada en
+        # claro al 443 falla raro en vez de fallar claro
+        tls = self._tls()
+        if tls is None:
+            destino = repeater.destino_de(repeater.parse_raw(peticion)[3])
+            tls = bool(destino and destino[1] == 443)
+        self.app.store.add_repeticion(repetidor.titulo_de(peticion),
+                                      peticion, tls)
+        self.notify("enviado al repeater; abrelo con r", timeout=5)
 
     COLOR_COD = {2: P.bien, 3: P.info, 4: P.acento, 5: P.peligro}
 
