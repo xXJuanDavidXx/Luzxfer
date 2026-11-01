@@ -58,6 +58,10 @@ experiencia de quien ya usaba la herramienta.
 ## [No publicado]
 
 ### Añadido
+- **Comparar dos flujos** (`y`, sobre los marcados con `m`): diferencia
+  línea a línea de peticiones o respuestas, con `tab` para alternar.
+  Compara los cuerpos descomprimidos, porque dos gzip distintos pueden
+  tener el mismo contenido.
 - **Conversor** (`d`): base64, url, hex, entidades HTML y JWT. Enseña qué
   podría ser el texto en vez de pedir el formato a ciegas, y se abre con
   el token más prometedor de la petición ya dentro.

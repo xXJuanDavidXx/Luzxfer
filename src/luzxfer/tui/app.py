@@ -32,6 +32,7 @@ from .paleta import P
 from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.cobertura import CoberturaScreen
 from .screens.codec import ConversorScreen
+from .screens.comparar import CompararScreen
 from .screens.intercepta import InterceptaScreen
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
@@ -100,6 +101,7 @@ class LuzxferApp(App):
         Binding("f", "foco_filtro", "filtrar", id="foco_filtro"),
         Binding("slash", "buscar", "buscar en todo", id="buscar"),
         Binding("d", "conversor", "conversor", id="conversor"),
+        Binding("y", "comparar", "comparar marcados", id="comparar"),
         Binding("m", "marcar", "marcar", id="marcar"),
         Binding("n", "nota", "nota", id="nota"),
         Binding("v", "confirmar", "confirmar", id="confirmar"),
@@ -697,6 +699,23 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         self.actualizar_estado()
         return errores
+
+    def action_comparar(self) -> None:
+        """Compara los dos flujos marcados.
+
+        Se eligen con m, que ya existia: inventar otra forma de elegir
+        dos flujos cuando la herramienta ya tiene una seria dar dos
+        maneras de hacer lo mismo.
+        """
+        marcados = self.store.list_flows(solo_marcados=True, limite=3,
+                                         ascendente=True)
+        if len(marcados) != 2:
+            self.notify(
+                f"hacen falta exactamente dos flujos marcados con m, "
+                f"y hay {len(marcados)}",
+                title="comparar", severity="warning", timeout=8)
+            return
+        self.push_screen(CompararScreen(marcados[0], marcados[1]))
 
     def action_conversor(self) -> None:
         """Abre el conversor con lo mas prometedor del flujo ya dentro."""

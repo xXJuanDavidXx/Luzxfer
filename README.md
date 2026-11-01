@@ -105,6 +105,7 @@ ignorado.
 | `p` | alternar entre el cuerpo reorganizado y el crudo |
 | `n` | escribir una nota en el flujo |
 | `m` | marcar un flujo |
+| `y` | comparar los dos flujos marcados |
 | `v` | confirmar el candidato seleccionado como hallazgo |
 | `a` | alcance: qué entra en el contrato |
 | `e` | mapa del sitio |
@@ -120,6 +121,38 @@ ignorado.
 en dos columnas en vez de dos pestañas, como Burp deja distribuirlas. La
 pestaña de candidatos sigue alcanzable en los dos modos, y la elección se
 recuerda con la sesión.
+
+### Comparar
+
+Marca dos flujos con `m` y pulsa `y`. «¿Qué cambió entre estas dos
+respuestas?» es la pregunta que sigue a casi todo lo que hace el
+Intruder: la misma petición con otro payload, o con otra sesión, y la
+diferencia es el hallazgo.
+
+```
+comparar · flujos 1 y 2 · respuesta · −1 +1   tab cambia de lado
+
+  HTTP/1.1 200 OK
+  Content-Type: application/json
+
+  {
+    "usuario": "admin",
+-   "rol": "administrador",
++   "rol": "invitado",
+    "saldo": 1000
+  }
+```
+
+`tab` alterna entre comparar las peticiones y las respuestas.
+
+Se eligen con `m` porque ya existía: inventar otra forma de elegir dos
+flujos cuando la herramienta ya tiene una sería dar dos maneras de hacer
+lo mismo.
+
+Se comparan los cuerpos **descomprimidos**. Dos respuestas con el mismo
+contenido pueden tener bytes gzip distintos —basta con que el servidor
+ponga otra marca de tiempo—, y comparar lo guardado diría que difieren
+cuando son idénticas: te invitaría a buscar una diferencia que no existe.
 
 ### Conversor
 
