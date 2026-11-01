@@ -17,7 +17,6 @@ from __future__ import annotations
 import itertools
 import math
 import threading
-import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
@@ -25,6 +24,7 @@ from enum import Enum
 from pathlib import Path
 
 from . import repeater
+from .ritmo import Acelerador
 
 MARCADOR = "§"
 
@@ -289,32 +289,6 @@ class Config:
     timeout: float = 15.0
 
 
-class _Acelerador:
-    """Un reloj compartido por todos los hilos del ataque.
-
-    El tope es del ataque entero, no de cada hilo. Con un sleep por hilo,
-    cuatro hilos a diez por segundo mandarian cuarenta sin que nadie lo
-    note, que es justo el accidente que el tope existe para evitar.
-
-    La espera ocurre FUERA del lock: dentro solo se reparte el turno.
-    """
-
-    def __init__(self, por_segundo: float):
-        self._intervalo = 1.0 / por_segundo if por_segundo > 0 else 0.0
-        self._lock = threading.Lock()
-        self._siguiente = 0.0
-
-    def esperar(self) -> None:
-        if not self._intervalo:
-            return
-        with self._lock:
-            turno = max(time.monotonic(), self._siguiente)
-            self._siguiente = turno + self._intervalo
-        falta = turno - time.monotonic()
-        if falta > 0:
-            time.sleep(falta)
-
-
 class Ataque:
     """Un ataque configurado y listo para lanzar.
 
@@ -360,7 +334,7 @@ class Ataque:
         propio bucle —en Textual con call_from_thread—, el mismo contrato
         que ya tiene Engine.on_flow.
         """
-        acelerador = _Acelerador(self.cfg.por_segundo)
+        acelerador = Acelerador(self.cfg.por_segundo)
         combos = combinar(self.cfg.modo, self.cfg.conjuntos,
                           self._n_pos, self.base)
         obreros = max(1, self.cfg.concurrencia)

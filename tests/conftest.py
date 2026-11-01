@@ -46,7 +46,32 @@ class _Eco(http.server.BaseHTTPRequestHandler):
         self.wfile.write(cuerpo)
 
     def do_GET(self):
-        if self.path.startswith("/gzip"):
+        if self.path.startswith("/refleja"):
+            # como una aplicacion de verdad: DECODIFICA el parametro y lo
+            # mete en el HTML sin escapar. El eco a secas devuelve la ruta
+            # tal cual, y un reflejo que vuelve codificado es justamente un
+            # reflejo escapado: contra eso el DAST no debe encontrar nada.
+            from urllib.parse import parse_qs, urlsplit
+            q = parse_qs(urlsplit(self.path).query).get("q", [""])[0]
+            cuerpo = f"<html><p>buscaste: {q}</p></html>".encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
+        elif self.path.startswith("/escapa"):
+            # la otra mitad: decodifica pero escapa. Aqui NO hay nada que
+            # encontrar, y encontrarlo seria el falso positivo.
+            import html
+            from urllib.parse import parse_qs, urlsplit
+            q = parse_qs(urlsplit(self.path).query).get("q", [""])[0]
+            cuerpo = f"<html><p>buscaste: {html.escape(q)}</p></html>".encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
+        elif self.path.startswith("/gzip"):
             q = self.path.split("q=", 1)[-1]
             cuerpo = gzip.compress(f"<html>buscaste: {q}</html>".encode())
             self.send_response(200)

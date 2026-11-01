@@ -31,6 +31,12 @@ experiencia de quien ya usaba la herramienta.
     Host header. Descartar corta la conexión sin contestar.
   - Avisa antes de perder en silencio un payload con espacios en la línea
     de petición.
+- **Barrido activo / DAST** (`b`): reflejo sin escapar, error de SQL,
+  redirección abierta y traversal, sobre query y cuerpo de formulario.
+  - Exige alcance configurado y se niega contra lo que no autorice.
+  - Doble pulsación para lanzarlo: la primera dice cuántas peticiones.
+  - 2 concurrentes, tope de 5/s del barrido entero.
+  - Los hallazgos entran como candidatos sin confirmar.
 
 ## [0.3.0] — 2026-11-01
 

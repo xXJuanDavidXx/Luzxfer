@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from rich.text import Text
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
@@ -23,7 +24,7 @@ from ..core.engine import Builtin, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import alcance as alc
-from ..core.tools import cuerpo, detector, intercepta, sitemap
+from ..core.tools import cuerpo, dast, detector, intercepta, sitemap
 from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.intercepta import InterceptaScreen
 from .screens.intruder import IntruderScreen
@@ -77,6 +78,7 @@ class LuzxferApp(App):
         Binding("a", "alcance", "alcance"),
         Binding("e", "mapa", "mapa del sitio"),
         Binding("x", "interceptar", "interceptar"),
+        Binding("b", "barrido", "barrido activo"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
         Binding("n", "nota", "nota"),
@@ -125,6 +127,8 @@ class LuzxferApp(App):
         # apagada de salida: encenderla sola seria colgarle el
         # navegador a alguien que no lo pidio
         self.interceptor = intercepta.Interceptor(self._detenida_desde_hilo)
+        self._escaneo: dast.Escaneo | None = None
+        self._barrido_avisado = False
 
     # ------------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -386,6 +390,10 @@ class LuzxferApp(App):
             piezas += [(f"mostrando {mostrados} de {total}", "#e05c5c"),
                        ("  ·  ", "#39404f")]
 
+        if self._escaneo is not None and not self._escaneo.terminado:
+            piezas += [(f"barriendo {self._escaneo.enviadas}/"
+                        f"{self._escaneo.total}", "#f0a93b"),
+                       ("  ·  ", "#39404f")]
         if self.interceptor.activa:
             # tiene que verse: olvidarse de que esta encendida es
             # quedarse mirando un navegador que no carga
@@ -404,6 +412,7 @@ class LuzxferApp(App):
             fid = int(ev.row_key.value)
         except (TypeError, ValueError):
             return
+        self._barrido_avisado = False     # otro flujo, otra confirmacion
         flujo = self.store.get_flow(fid)
         if flujo:
             self._flujo_actual = flujo
@@ -514,6 +523,64 @@ class LuzxferApp(App):
         self.refrescar_tabla()
         self.actualizar_estado()
         return errores
+
+    def action_barrido(self) -> None:
+        """Barrido activo sobre el flujo elegido. Lleva correa.
+
+        Es lo unico de la herramienta que manda peticiones por su cuenta,
+        asi que se pide confirmacion: no puede salir de un roce de tecla.
+        """
+        if self._escaneo is not None and not self._escaneo.terminado:
+            self.notify("ya hay un barrido corriendo", severity="warning")
+            return
+        if self._flujo_actual is None:
+            self.notify("selecciona un flujo primero", severity="warning")
+            return
+
+        crudo = self._flujo_actual.request.raw()
+        try:
+            e = dast.Escaneo(
+                crudo, self.alcance,
+                tls=self._flujo_actual.request.url.startswith("https://"))
+        except (dast.FueraDeAlcance, dast.SinPuntos) as err:
+            self.notify(str(err), title="no se lanza el barrido",
+                        severity="error", timeout=12)
+            return
+
+        if not self._barrido_avisado:
+            self._barrido_avisado = True
+            self.query_one("#estado", Static).update(Text(
+                f"barrido: {e.total} peticiones contra "
+                f"{self._flujo_actual.request.host} · b otra vez para lanzarlo",
+                style="#e05c5c"))
+            return
+
+        self._barrido_avisado = False
+        self._escaneo = e
+        self._correr_barrido(e)
+
+    @work(thread=True, exclusive=True)
+    def _correr_barrido(self, e: dast.Escaneo) -> None:
+        """Fuera del hilo de la interfaz, como todo lo que toca la red."""
+        e.correr(lambda f: self.call_from_thread(self._hallazgo_dast, f))
+        self.call_from_thread(self._fin_barrido, e)
+
+    def _hallazgo_dast(self, hallazgo) -> None:
+        """Los hallazgos del DAST entran como CANDIDATOS, sin confirmar.
+
+        La raya entre candidato y hallazgo la cruza una persona con v,
+        tambien aqui: un escaner que se da la razon a si mismo es lo que
+        hace que nadie se fie de la salida de un escaner.
+        """
+        if self.store.add_finding(hallazgo):
+            self._agregar_hallazgo(self.query_one("#hallazgos", DataTable),
+                                   hallazgo)
+        self.actualizar_estado()
+
+    def _fin_barrido(self, e: dast.Escaneo) -> None:
+        self.notify(f"barrido terminado: {e.enviadas} peticiones",
+                    title="revisa la pestaña de candidatos", timeout=8)
+        self.actualizar_estado()
 
     def action_interceptar(self) -> None:
         if self.interceptor.activa and self.interceptor.pendientes():

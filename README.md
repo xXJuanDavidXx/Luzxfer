@@ -10,7 +10,8 @@ conserva ese estado entre sesiones.
 
 > **Estado: alfa.** Funcionan el núcleo, las sesiones con nombre, el
 > historial, el repeater, el Intruder, el alcance, el mapa del sitio y la
-> interceptación en vuelo. Falta la matriz de cobertura WSTG. Ver el roadmap,
+> interceptación en vuelo y el barrido activo. Falta la matriz de cobertura
+> WSTG. Ver el roadmap,
 > y [CHANGELOG.md](CHANGELOG.md) para lo que cambió en cada versión.
 
 ---
@@ -106,6 +107,7 @@ ignorado.
 | `a` | alcance: qué entra en el contrato |
 | `e` | mapa del sitio |
 | `x` | interceptar: parar las peticiones antes de que salgan |
+| `b` | barrido activo sobre el flujo seleccionado |
 | `s` | sesiones |
 | `c` | limpiar el historial (los candidatos se conservan) |
 | `g` / `G` | primer / último flujo |
@@ -315,6 +317,34 @@ Dos reglas, una por cada forma de equivocarse:
 El host no distingue mayúsculas y la ruta sí: en un servidor real `/API` y
 `/api` pueden ser cosas distintas.
 
+## Barrido activo (DAST)
+
+`b` lanza un barrido sobre el flujo que tengas seleccionado. **Es lo único
+de luzxfer que manda peticiones por su cuenta**, así que lleva correa:
+
+1. **Exige alcance.** Sin alcance configurado no corre, y no corre contra
+   nada que el alcance no autorice. Mirar de más es ruido; disparar de más
+   puede ser el contrato.
+2. **Se dispara a mano**, sobre una petición que elegiste. No rastrea, no
+   descubre, no se lanza solo. La primera `b` dice cuántas peticiones
+   saldrían; la segunda las manda.
+3. **Ritmo prudente:** 2 concurrentes y tope de 5 por segundo, del barrido
+   entero y no por hilo.
+4. **No confirma nada.** Lo que encuentra entra como candidato, con sus IDs
+   WSTG. La raya la cruzas tú con `v`.
+
+Prueba reflejo sin escapar, error de SQL, redirección abierta y traversal
+de ruta, sobre los parámetros de la query y de un cuerpo de formulario.
+
+**Lo que aporta frente al detector pasivo** es la diferencia entre ver que
+un valor vuelve y saber si vuelve *entero*. El activo manda un marcador
+propio: si vuelve escapado, no hay nada que explotar ahí, y decir que sí
+lo hay es el falso positivo que hace inservible la salida de un escáner.
+
+JSON todavía no se inyecta. Fingir que sí, troceándolo como si fuera un
+formulario, mandaría basura al servidor y daría resultados que no
+significan nada.
+
 ## Candidatos, no hallazgos
 
 Mientras navegas, luzxfer señala cosas que vale la pena mirar: entrada
@@ -414,7 +444,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] Alcance: reglas de inclusión y exclusión, filtro del historial
 - [x] Árbol de sitemap
 - [ ] Interceptar y editar en vuelo — la brecha real contra Burp hoy
-- [ ] DAST con correa: exige alcance, disparo manual, ritmo limitado
+- [x] DAST con correa: exige alcance, disparo manual, ritmo limitado
 - [ ] Matriz de cobertura WSTG y generación de informes
 - [ ] Adaptador de motor mitmproxy
 - [ ] API de plugins
