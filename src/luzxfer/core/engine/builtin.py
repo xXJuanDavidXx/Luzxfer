@@ -105,7 +105,24 @@ class _Handler(BaseHTTPRequestHandler):
         if cuerpo or self.command in ("POST", "PUT", "PATCH"):
             salida.append(("Content-Length", str(len(cuerpo))))
 
-        req = Request(method=self.command, url=url, headers=salida, body=cuerpo,
+        # ---- aqui se para, si hay que pararla -------------------------
+        # Se detiene DESPUES de los retoques del proxy y ANTES de salir:
+        # lo que se enseña es exactamente lo que va a viajar.
+        metodo = self.command
+        inter = self.engine.interceptor
+        if inter is not None and inter.activa:
+            final = inter.detener(_componer(metodo, ruta,
+                                            self.request_version, salida, cuerpo))
+            if final is None:
+                # descartada: se corta la conexion sin contestar, que es
+                # lo que «descartar» significa. Inventar una respuesta
+                # falsearia lo que el cliente cree que paso.
+                self.close_connection = True
+                return
+            metodo, ruta, salida, cuerpo = _descomponer(
+                final, metodo, ruta, salida, cuerpo)
+
+        req = Request(method=metodo, url=url, headers=salida, body=cuerpo,
                       http_version=self.request_version)
 
         try:
@@ -113,7 +130,7 @@ class _Handler(BaseHTTPRequestHandler):
             # putheader en vez de request(headers=dict): un dict colapsa las
             # cabeceras repetidas, y skip_* evita que http.client invente
             # cabeceras que el cliente no mando.
-            con.putrequest(self.command, ruta, skip_host=True, skip_accept_encoding=True)
+            con.putrequest(metodo, ruta, skip_host=True, skip_accept_encoding=True)
             for k, v in salida:
                 con.putheader(k, v)
             con.endheaders(cuerpo or None)
@@ -136,7 +153,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.engine._emitir(flujo)
 
         self.send_response(resp.status, resp.reason)
-        es_head = self.command == "HEAD"
+        es_head = metodo == "HEAD"
         for k, v in resp.headers:
             # en HEAD el Content-Length del servidor describe un cuerpo que
             # no viaja: se conserva tal cual
@@ -167,7 +184,7 @@ class Builtin(Engine):
 
     def __init__(self, on_flow, *, host="127.0.0.1", port=8080,
                  upstream: str | None = None, filtrar_encoding: bool = True,
-                 filtrar_cache: bool = True):
+                 filtrar_cache: bool = True, interceptor=None):
         """Dos retoques a la peticion, los dos encendidos por defecto y los
         dos por el mismo motivo: sin ellos llegan cuerpos que no se pueden
         leer, y un cuerpo ilegible es un detector ciego que no lo dice.
@@ -188,6 +205,9 @@ class Builtin(Engine):
         self.upstream = upstream
         self.filtrar_encoding = filtrar_encoding
         self.filtrar_cache = filtrar_cache
+        # None = nunca se detiene nada; es lo que mantiene el motor usable
+        # sin interfaz, por ejemplo en los tests del propio proxy
+        self.interceptor = interceptor
         self._srv: ThreadingHTTPServer | None = None
         self._hilo: threading.Thread | None = None
 
@@ -261,3 +281,35 @@ def puerto_libre(host: str, port: int) -> bool:
             return True
         except OSError:
             return False
+
+
+def _componer(metodo: str, ruta: str, version: str,
+              cabeceras: list[tuple[str, str]], cuerpo: bytes) -> str:
+    """La peticion tal como va a salir, en texto editable."""
+    lineas = [f"{metodo} {ruta} {version}"]
+    lineas += [f"{k}: {v}" for k, v in cabeceras]
+    return "\r\n".join(lineas) + "\r\n\r\n" + cuerpo.decode("utf-8", "replace")
+
+
+def _descomponer(texto: str, metodo: str, ruta: str,
+                 cabeceras: list[tuple[str, str]], cuerpo: bytes):
+    """Lee la peticion editada. Si no se entiende, devuelve la original.
+
+    Ante la duda sale lo que habia: tragarse el trafico del analista
+    porque se le fue un dedo editando es el peor resultado posible.
+
+    El Content-Length se recalcula, por la misma razon que en el
+    repeater: editar el cuerpo a mano y olvidarlo deja al servidor
+    esperando bytes que no van a llegar.
+    """
+    from ..tools.repeater import ErrorPeticion, parse_raw
+
+    try:
+        m, r, _v, cab, cue = parse_raw(texto)
+    except ErrorPeticion:
+        return metodo, ruta, cabeceras, cuerpo
+
+    cab = [(k, v) for k, v in cab if k.lower() != "content-length"]
+    if cue or m in ("POST", "PUT", "PATCH"):
+        cab.append(("Content-Length", str(len(cue))))
+    return m, r, cab, cue
