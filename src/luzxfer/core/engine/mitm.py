@@ -244,12 +244,6 @@ class Mitm(Engine):
         finally:
             self._running = False
 
-    def _emitir(self, flujo: Flow) -> None:
-        try:
-            self.on_flow(flujo)
-        except Exception:
-            pass
-
     @property
     def puerto_real(self) -> int:
         """El puerto que acabo escuchando. Con port=0 lo elige el sistema."""

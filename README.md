@@ -658,6 +658,23 @@ motor, así que cambiar de motor es cambiar una clase.
 luzxfer --motor mitm        # HTTPS, HTTP/2 y WebSockets
 ```
 
+### Flujos perdidos
+
+Si el almacén está bloqueado, el disco lleno o la aplicación cerrándose, la
+entrega de un flujo al núcleo puede fallar. El proxy **no se cae por eso**:
+si se cayera, el navegador dejaría de cargar a mitad de una prueba y se
+perdería mucho más que un flujo.
+
+Pero tampoco se pierde en silencio. La barra de estado muestra `N PERDIDOS`
+en rojo mientras haya alguno, y la primera vez salta un aviso con el motivo
+exacto. Esto importa más de lo que parece: un historial al que le faltan
+flujos sin decirlo lleva a concluir que el objetivo no responde, y eso es un
+falso negativo **fabricado por la herramienta**. La peor clase, porque no
+deja rastro y nadie lo va a buscar.
+
+Si ves ese contador, el historial está incompleto y lo que sea que estés
+mirando no es la sesión entera.
+
 El motor integrado contesta `CONNECT` con un 501 que explica el motivo, en
 vez de fallar en silencio. Interceptar TLS necesita una CA propia y generar
 certificados por host, que es justo la dependencia pesada que el motor
