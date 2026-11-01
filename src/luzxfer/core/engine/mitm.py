@@ -35,11 +35,52 @@ def disponible() -> bool:
 
 
 class _Captura:
-    """Addon de mitmproxy: convierte sus flujos en los nuestros."""
+    """Addon de mitmproxy: convierte sus flujos y para los que toque."""
 
-    def __init__(self, emitir):
+    def __init__(self, emitir, interceptor, bucle):
         self.emitir = emitir
+        self.interceptor = interceptor
+        self.bucle = bucle
 
+    # ------------------------------------------------------- detener
+    def request(self, flow) -> None:
+        """Para la peticion sin bloquear el bucle de mitmproxy.
+
+        Esta es la parte que hizo que esto no se hiciera a la primera.
+        El hook corre EN el bucle de mitmproxy: esperar aqui a que el
+        analista decida pararia todos los flujos a la vez, no solo el
+        que se esta mirando. Asi que se usa el mecanismo de mitmproxy
+        —flow.intercept() marca y devuelve— y la espera se hace en un
+        hilo aparte, que reanuda desde el bucle cuando hay decision.
+        """
+        i = self.interceptor
+        if i is None or not i.activa:
+            return
+        flow.intercept()
+        threading.Thread(target=self._esperar, args=(flow,),
+                         name="luzxfer-mitm-detenida", daemon=True).start()
+
+    def _esperar(self, flow) -> None:
+        crudo = _a_crudo(flow.request)
+        try:
+            final = self.interceptor.detener(crudo)
+        except Exception:
+            final = crudo          # ante la duda, la peticion sale
+        self.bucle.call_soon_threadsafe(self._aplicar, flow, crudo, final)
+
+    @staticmethod
+    def _aplicar(flow, crudo: str, final: str | None) -> None:
+        if final is None:
+            flow.kill()            # descartar: el servidor no la ve
+            return
+        if final != crudo:
+            try:
+                _editar(flow.request, final)
+            except Exception:
+                pass               # ilegible: sale la original
+        flow.resume()
+
+    # ------------------------------------------------------- capturar
     def response(self, flow) -> None:          # mitmproxy.http.HTTPFlow
         try:
             self.emitir(_a_flujo(flow))
@@ -47,6 +88,33 @@ class _Captura:
             # un fallo del consumidor nunca tumba el proxy, igual que en
             # el motor integrado
             pass
+
+
+def _a_crudo(pet) -> str:
+    """La peticion de mitmproxy en texto editable, tal como va a salir."""
+    lineas = [f"{pet.method} {pet.path} {pet.http_version}"]
+    lineas += [f"{k}: {v}" for k, v in pet.headers.items(multi=True)]
+    cuerpo = (pet.raw_content or b"").decode("utf-8", "replace")
+    return "\r\n".join(lineas) + "\r\n\r\n" + cuerpo
+
+
+def _editar(pet, texto: str) -> None:
+    """Vuelca una peticion editada sobre la de mitmproxy.
+
+    El Content-Length no se toca a mano: mitmproxy lo recalcula al
+    asignar el contenido, y ponerlo ademas dejaria dos.
+    """
+    from ..tools.repeater import parse_raw
+
+    metodo, ruta, _version, cabeceras, cuerpo = parse_raw(texto)
+    pet.method = metodo
+    pet.path = ruta
+    pet.headers.clear()
+    for k, v in cabeceras:
+        if k.lower() == "content-length":
+            continue
+        pet.headers.add(k, v)
+    pet.content = cuerpo
 
 
 def _a_flujo(f) -> Flow:
@@ -83,17 +151,19 @@ def _a_flujo(f) -> Flow:
 class Mitm(Engine):
     """Motor sobre mitmproxy. Intercepta TLS; necesita el extra [mitm].
 
-    La interceptacion en vuelo de luzxfer todavia NO pasa por aqui: el
-    `request` hook de mitmproxy corre en su bucle, y bloquearlo
-    detendria todos los demas flujos a la vez. Hacerlo bien necesita
-    flow.intercept() y reanudar desde el bucle, y eso es un trabajo
-    aparte. Queda dicho en vez de fingir que funciona.
+    La interceptacion en vuelo pasa por aqui igual que por el motor
+    integrado, pero por otro camino: el hook de peticion de mitmproxy
+    corre en su bucle y bloquearlo pararia todos los flujos a la vez,
+    asi que se marca con flow.intercept(), se espera en un hilo y se
+    reanuda desde el bucle.
     """
 
     def __init__(self, on_flow, *, host="127.0.0.1", port=8080,
-                 upstream: str | None = None, **_ignorados):
+                 upstream: str | None = None, interceptor=None,
+                 **_ignorados):
         super().__init__(on_flow, host=host, port=port)
         self.upstream = upstream
+        self.interceptor = interceptor
         self._hilo: threading.Thread | None = None
         self._bucle: asyncio.AbstractEventLoop | None = None
         self._maestro = None
@@ -164,7 +234,8 @@ class Mitm(Engine):
             # escribiendo en el terminal la destrozaria
             self._maestro = DumpMaster(opts, loop=bucle,
                                        with_termlog=False, with_dumper=False)
-            self._maestro.addons.add(_Captura(self._emitir))
+            self._maestro.addons.add(
+                _Captura(self._emitir, self.interceptor, bucle))
             bucle.call_soon(self._listo.set)
             bucle.run_until_complete(self._maestro.run())
         except Exception as e:

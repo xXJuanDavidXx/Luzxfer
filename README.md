@@ -511,10 +511,12 @@ cuerpos en brotli se leen de verdad y el proxy deja de recortar `br` del
 `Accept-Encoding`: lo que se recorta es lo que no se puede leer, no una
 lista fija.
 
-**La interceptación en vuelo (`x`) todavía no pasa por el motor de
-mitmproxy.** Su hook de petición corre en su propio bucle, y bloquearlo
-detendría todos los flujos a la vez; hacerlo bien necesita `flow.intercept()`
-y reanudar desde ese bucle. Queda pendiente, dicho en vez de fingido.
+La interceptación en vuelo (`x`) funciona con los dos motores. Con
+mitmproxy va por otro camino: su hook de petición corre en su propio
+bucle y bloquearlo pararía **todos** los flujos a la vez, así que la
+petición se marca con `flow.intercept()`, la espera ocurre en un hilo
+aparte y se reanuda desde el bucle. Puedes tener varias detenidas a la
+vez sin que el proxy se atasque.
 
 ## Seguridad
 

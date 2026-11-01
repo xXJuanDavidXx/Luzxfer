@@ -132,6 +132,8 @@ atiende cuando mejor encaje con el desarrollo, no de inmediato.
 binarios se resumen con volcado hexadecimal) y las redirecciones, que
 resultaron ser 304 de caché y no redirecciones. Queda:
 
+**La interceptación sobre mitmproxy ya está hecha** (2026-11-01). Queda:
+
 1. **Pestañas del repeater.** Hoy es un modal que pierde el estado al
    cerrarlo. Burp guarda una pestaña numerada por petición, con su respuesta,
    y las conserva. Encaja natural después del Intruder, porque las dos

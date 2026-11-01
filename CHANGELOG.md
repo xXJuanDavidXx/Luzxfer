@@ -67,12 +67,14 @@ experiencia de quien ya usaba la herramienta.
   reventaba al salir de la herramienta.
 
 ### Añadido
+- **La interceptación en vuelo funciona también con el motor de
+  mitmproxy**, sin bloquear su bucle: varias peticiones pueden estar
+  detenidas a la vez sin que el proxy se atasque.
 - **Motor de mitmproxy** (`--motor mitm`): HTTPS, HTTP/2 y WebSockets. El
   integrado sigue siendo el de por defecto, porque es el único que corre
   en Termux.
   - El extra `[mitm]` trae brotli, así que con él los cuerpos en brotli se
     decodifican y el proxy deja de recortar `br`.
-  - La interceptación en vuelo todavía no pasa por este motor.
 - **API de plugins**: un `.py` en `~/.local/share/luzxfer/plugins/` que
   define `registrar(api)` puede añadir comprobaciones pasivas y pruebas
   activas del barrido. Con ejemplo funcionando en `ejemplos/plugins/`.

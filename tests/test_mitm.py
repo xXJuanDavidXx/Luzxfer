@@ -151,3 +151,133 @@ async def test_pedir_un_motor_que_no_esta_lo_explica(monkeypatch):
     async with app.run_test() as pilot:
         await pilot.pause()
         assert app.engine is None or not app.engine.running
+
+
+# ------------------------------------- interceptacion sobre este motor
+def _resolver_cuando_llegue(i, editar, espera=10.0):
+    """Hace de analista desde otro hilo: espera a que algo se detenga."""
+    from luzxfer.core.tools import intercepta
+    limite = time.time() + espera
+    while time.time() < limite:
+        pend = i.pendientes()
+        if pend:
+            d = pend[0]
+            if editar is None:
+                i.resolver(d.id, intercepta.DESCARTAR)
+            else:
+                i.resolver(d.id, intercepta.SOLTAR, editar(d.crudo))
+            return
+        time.sleep(0.01)
+
+
+def _por_mitm(eco, ruta, interceptor=None, editar=False, espera=20):
+    import threading
+
+    h, p = eco
+    cap = []
+    m = mitm.Mitm(cap.append, port=0, upstream=f"http://{h}:{p}",
+                  interceptor=interceptor)
+    m.start()
+    if interceptor is not None and editar is not False:
+        threading.Thread(target=_resolver_cuando_llegue,
+                         args=(interceptor, editar), daemon=True).start()
+    try:
+        con = http.client.HTTPConnection("127.0.0.1", m.puerto_real,
+                                         timeout=espera)
+        con.request("GET", ruta)
+        r = con.getresponse()
+        cuerpo = r.read()
+        con.close()
+        for _ in range(100):
+            if cap:
+                break
+            time.sleep(0.05)
+        return cuerpo, cap
+    except Exception:
+        return None, cap
+    finally:
+        m.stop()
+
+
+def test_sin_interceptor_el_motor_mitm_va_igual(eco):
+    cuerpo, _ = _por_mitm(eco, "/eco?q=normal")
+    assert b"normal" in cuerpo
+
+
+def test_interceptor_apagado_no_detiene_nada(eco):
+    from luzxfer.core.tools import intercepta
+    i = intercepta.Interceptor()
+    cuerpo, _ = _por_mitm(eco, "/eco?q=normal", interceptor=i)
+    assert b"normal" in cuerpo
+
+
+def test_editar_en_vuelo_sobre_mitm(eco):
+    """Lo que faltaba: el servidor nunca ve la original, tambien aqui."""
+    from luzxfer.core.tools import intercepta
+    i = intercepta.Interceptor()
+    i.activa = True
+    cuerpo, cap = _por_mitm(
+        eco, "/eco?q=original", interceptor=i,
+        editar=lambda c: c.replace("q=original", "q=EDITADOMITM"))
+    assert cuerpo is not None and b"EDITADOMITM" in cuerpo
+    assert b"original" not in cuerpo
+    assert cap and "EDITADOMITM" in cap[0].request.url
+
+
+def test_descartar_sobre_mitm_no_deja_llegar_nada(eco):
+    from luzxfer.core.tools import intercepta
+    i = intercepta.Interceptor()
+    i.activa = True
+    cuerpo, _ = _por_mitm(eco, "/eco?q=muere", interceptor=i, editar=None)
+    assert cuerpo is None or b"muere" not in cuerpo
+
+
+def test_una_peticion_detenida_no_congela_a_las_demas(eco):
+    """La razon de que esto no se hiciera a la primera: el hook de
+    mitmproxy corre en su bucle, y bloquearlo pararia TODOS los flujos
+    a la vez, no solo el que se esta mirando."""
+    import threading
+
+    from luzxfer.core.tools import intercepta
+    h, p = eco
+    i = intercepta.Interceptor()
+    i.activa = True
+    m = mitm.Mitm(lambda f: None, port=0, upstream=f"http://{h}:{p}")
+    m.interceptor = i
+    m.stop()
+    m = mitm.Mitm(lambda f: None, port=0, upstream=f"http://{h}:{p}",
+                  interceptor=i)
+    m.start()
+    try:
+        hechas = []
+
+        def pedir(n):
+            try:
+                con = http.client.HTTPConnection("127.0.0.1", m.puerto_real,
+                                                 timeout=20)
+                con.request("GET", f"/eco?q=p{n}")
+                con.getresponse().read()
+                con.close()
+                hechas.append(n)
+            except Exception:
+                pass
+
+        hilos = [threading.Thread(target=pedir, args=(n,), daemon=True)
+                 for n in range(3)]
+        for t in hilos:
+            t.start()
+
+        # las tres se detienen a la vez: el bucle de mitmproxy sigue vivo
+        for _ in range(200):
+            if len(i.pendientes()) == 3:
+                break
+            time.sleep(0.05)
+        assert len(i.pendientes()) == 3, \
+            "si el hook bloqueara el bucle, solo llegaria una"
+
+        i.soltar_todas()
+        for t in hilos:
+            t.join(timeout=20)
+        assert sorted(hechas) == [0, 1, 2]
+    finally:
+        m.stop()
