@@ -21,6 +21,7 @@ from textual.widgets import Button, DataTable, Input, Select, Static, TextArea
 from ...core.models import Flow
 from ...core.tools import intruder, repeater
 from ..paleta import P
+from .intruder_detalle import DetalleResultadoScreen
 
 AVISO_GRANDE = 1000
 
@@ -43,6 +44,9 @@ class IntruderScreen(ModalScreen):
         self._ataque_id: int | None = None
         self._confirmado = False
         self._desc = False            # orden actual de la columna largo
+        # los resultados de la tanda actual, por numero de fila, para poder
+        # reconstruir la peticion que salio cuando se elige una fila
+        self._resultados: dict[int, intruder.Resultado] = {}
 
     # ------------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -51,7 +55,8 @@ class IntruderScreen(ModalScreen):
                 Text.assemble(
                     ("intruder", f"bold {P.acento}"),
                     (f"  ·  flujo {self.flujo.id}", P.secundario),
-                    ("   ctrl+m marcar · ctrl+l lanzar · ctrl+x abortar · esc cerrar",
+                    ("   ctrl+m marcar · ctrl+l lanzar · ctrl+x abortar · "
+                     "enter ver la peticion · esc cerrar",
                      P.tenue),
                 ),
                 id="int-titulo",
@@ -234,6 +239,7 @@ class IntruderScreen(ModalScreen):
         self.ataque = a
         tabla = self.query_one("#int-resultados", DataTable)
         tabla.clear()
+        self._resultados.clear()      # empieza una tanda nueva
         self._ataque_id = self.app.store.add_ataque(
             a.cfg.modo.value, self._etiqueta_destino(),
             self.query_one("#int-editor", TextArea).text, a.total)
@@ -250,6 +256,7 @@ class IntruderScreen(ModalScreen):
     def _llego(self, r: intruder.Resultado) -> None:
         if self._ataque_id is not None:
             self.app.store.add_resultado(self._ataque_id, r)
+        self._resultados[r.n] = r
         self._fila(r)
         if self.ataque is not None:
             self._estado(f"lanzando… {self.ataque.enviadas}/{self.ataque.total}",
@@ -280,6 +287,26 @@ class IntruderScreen(ModalScreen):
             self.action_abortar()
 
     # --------------------------------------------------------- resultados
+    def on_data_table_row_selected(self, ev: DataTable.RowSelected) -> None:
+        """Al elegir una fila, enseña la peticion que salio en ella.
+
+        Se reconstruye con la misma funcion que uso el ataque sobre el
+        crudo que se lanzo, asi que es lo que viajo, no una aproximacion.
+        """
+        if ev.data_table.id != "int-resultados" or self.ataque is None:
+            return
+        try:
+            n = int(ev.row_key.value)
+        except (TypeError, ValueError):
+            return
+        r = self._resultados.get(n)
+        if r is None:
+            return
+        peticion = intruder.sustituir(self.ataque.crudo, r.payloads)
+        cod = "ERR" if r.status is None else str(r.status)
+        titulo = f"#{r.n} · {' / '.join(r.payloads)} · {cod} · {r.largo}B"
+        self.app.push_screen(DetalleResultadoScreen(titulo, peticion))
+
     COLOR_COD = {2: P.bien, 3: P.info, 4: P.acento, 5: P.peligro}
 
     def _fila(self, r: intruder.Resultado) -> None:

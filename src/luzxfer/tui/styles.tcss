@@ -437,3 +437,16 @@ Button.-primary:hover {
 #exp-texto { height: 1fr; border: round $lx-borde; }
 
 #exp-avisos { height: auto; margin-top: 1; }
+
+/* detalle de un resultado del intruder */
+#det-caja {
+    width: 90%;
+    height: 80%;
+    background: $lx-modal;
+    border: round $lx-acento;
+    padding: 1 2;
+}
+
+#det-titulo { height: 1; margin-bottom: 1; }
+
+#det-peticion { height: 1fr; border: round $lx-borde; }
