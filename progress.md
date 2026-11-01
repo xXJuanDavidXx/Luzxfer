@@ -253,7 +253,7 @@ funcionando con sus tests y `ruff` limpio.
 ```bash
 cd /home/davy/HERRAMIENTAS/luzxfer
 
-./venv/bin/python -m pytest -q          # 136 tests, ~34 s
+./venv/bin/python -m pytest -q          # 564 tests, ~2 min
 ./venv/bin/ruff check src tests         # linter
 ./venv/bin/luzxfer --sesiones           # que hay guardado
 ./venv/bin/luzxfer -s lab -u http://127.0.0.1:8099   # modo inverso

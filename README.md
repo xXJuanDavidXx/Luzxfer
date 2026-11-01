@@ -65,7 +65,14 @@ luzxfer -u http://127.0.0.1:8099     # modo inverso, para un lab local
 luzxfer -s acme-corp --no-engine     # revisar una sesión sin levantar el proxy
 luzxfer -d ~/trabajo/objetivo.db     # archivo de sesión en una ruta tuya
 luzxfer -d :memory:                  # efímera, se pierde al salir
+luzxfer -H 0.0.0.0                   # escuchar en toda la red — lee «Seguridad»
+luzxfer --version                    # la versión y salir
 ```
+
+`-H/--host` es la única bandera que saca el proxy de `127.0.0.1`. Por
+omisión escucha solo en loopback, que es lo correcto en casi todos los
+casos; cambiarlo abre tu proxy a quien comparta la red. La sección
+[Seguridad](#seguridad) explica por qué eso importa más de lo que parece.
 
 ### Sesiones
 
@@ -93,8 +100,18 @@ ignorado.
 
 ### Teclas
 
+**`?` abre la lista completa**, agrupada por para qué sirve cada tecla y
+construida a partir de tus atajos reales: si remapeaste alguno, ahí sale el
+tuyo.
+
+El pie de la pantalla solo muestra seis —`?`, `r`, `x`, `/`, `w`, `q`—
+porque solo cabe una fila y a ochenta columnas no entran más. Las otras
+dieciocho funcionan igual; lo que decide `show` es qué se pinta, no qué
+responde.
+
 | tecla | hace |
 | --- | --- |
+| `?` | **todas las teclas, agrupadas** |
 | `j` / `k` o flechas | moverse por el historial |
 | `f` | filtrar por url |
 | `/` | buscar en url, cabeceras y cuerpos |
@@ -115,6 +132,7 @@ ignorado.
 | `s` | sesiones |
 | `c` | limpiar el historial (los candidatos se conservan) |
 | `g` / `G` | primer / último flujo |
+| `esc` | devolver el foco al historial |
 | `q` | salir |
 
 `t` y el botón que está junto al filtro hacen lo mismo: petición y respuesta
@@ -594,12 +612,13 @@ intruder = ctrl+i
 barrido  = ctrl+b
 ```
 
-Las acciones son las de la pantalla principal: `salir`, `repeater`,
-`intruder`, `sesiones`, `alcance`, `mapa`, `interceptar`, `barrido`,
-`cobertura`, `foco_filtro`, `marcar`, `nota`, `confirmar`, `vista`,
-`cuerpo`, `limpiar`, `arriba`, `abajo`, `cursor_arriba`, `cursor_abajo`,
-`quitar_foco`. **El pie de la pantalla se regenera solo**, así que la
-ayuda nunca se queda diciendo la tecla de antes.
+Las acciones son las de la pantalla principal: `salir`, `ayuda`,
+`repeater`, `intruder`, `sesiones`, `alcance`, `mapa`, `interceptar`,
+`barrido`, `cobertura`, `foco_filtro`, `buscar`, `conversor`, `comparar`,
+`marcar`, `nota`, `confirmar`, `vista`, `cuerpo`, `limpiar`, `arriba`,
+`abajo`, `cursor_arriba`, `cursor_abajo`, `quitar_foco`. **El pie y la
+pantalla de `?` se generan solos**, a partir de los atajos activos, así que
+ninguno de los dos se queda diciendo la tecla de antes.
 
 Si dos acciones piden la misma tecla, se avisa y se dice **cuál se
 queda**; la otra conserva la suya en vez de quedarse muerta. Una acción
@@ -679,8 +698,11 @@ vez sin que el proxy se atasque.
 ## Seguridad
 
 Esta herramienta reenvía peticiones arbitrarias. **Mantenla en loopback.**
-Atarla a una interfaz enrutable es regalarle un proxy abierto a cualquiera de
-tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
+Atarla a una interfaz enrutable —que es lo que hace `-H/--host`— es
+regalarle un proxy abierto a cualquiera de tu red: quien lo encuentre puede
+navegar a través de tu máquina, con tu IP, y llegar a lo que tú alcanzas.
+Por omisión escucha en `127.0.0.1` justamente por eso. Si necesitas llegar
+desde otra máquina, haz un túnel por SSH en vez de cambiar el host.
 
 ## Roadmap
 
@@ -693,7 +715,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] Intruder, cuatro modos, con grep-match sobre los resultados
 - [x] Alcance: reglas de inclusión y exclusión, filtro del historial
 - [x] Árbol de sitemap
-- [ ] Interceptar y editar en vuelo — la brecha real contra Burp hoy
+- [x] Interceptar y editar en vuelo — era la brecha real contra Burp
 - [x] DAST con correa: exige alcance, disparo manual, ritmo limitado
 - [x] Matriz de cobertura WSTG y generación de informes
 - [x] Adaptador de motor mitmproxy

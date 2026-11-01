@@ -394,3 +394,17 @@ Button.-primary:hover {
 #cmp-titulo { height: 1; margin-bottom: 1; }
 
 #cmp-scroll { height: 1fr; }
+
+/* ayuda: la lista completa de teclas, que en el pie no cabe */
+#ayuda-caja {
+    width: 70;
+    max-width: 94%;
+    height: 80%;
+    background: $lx-modal;
+    border: round $lx-acento;
+    padding: 1 2;
+}
+
+#ayuda-titulo { height: 1; margin-bottom: 1; }
+
+#ayuda-scroll { height: 1fr; }
