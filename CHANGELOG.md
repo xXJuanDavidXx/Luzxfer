@@ -5,7 +5,7 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
-## [Sin publicar]
+## [0.9.0] — 2026-11-01
 
 ### Añadido
 - **Mandar un resultado del Intruder al repeater** (`ctrl+r` o botón, desde
