@@ -234,6 +234,76 @@ class Store:
         # siempre se toman los N mas recientes; ascendente solo cambia el orden
         return flujos[::-1] if ascendente else flujos
 
+    def buscar(
+        self,
+        texto: str,
+        *,
+        limite: int = 1000,
+        ascendente: bool = False,
+    ) -> list[Flow]:
+        """Los flujos donde aparece ese texto, en cualquier parte.
+
+        URL, cabeceras y cuerpos, de la peticion y de la respuesta, sin
+        distinguir mayusculas.
+
+        NO se puede hacer con un LIKE de SQL, y esa es la razon de que
+        esto exista: el cuerpo guardado son los bytes tal como llegaron,
+        asi que dentro de un gzip la aguja no esta en claro. Un LIKE
+        parecia funcionar y se dejaria fuera casi todo el HTML de un
+        objetivo real, en silencio, que es exactamente el fallo que este
+        proyecto lleva toda la vida persiguiendo.
+
+        El precio es recorrer y descomprimir en Python. Se acota con
+        `limite`, y `contar_busqueda()` dice cuantos hay en total.
+        """
+        return self._buscar(texto, limite=limite, ascendente=ascendente)[0]
+
+    def contar_busqueda(self, texto: str) -> int:
+        """Cuantos flujos coinciden, sin el limite de arriba."""
+        return self._buscar(texto, limite=None, ascendente=False)[1]
+
+    def _buscar(self, texto: str, *, limite: int | None,
+                ascendente: bool) -> tuple[list[Flow], int]:
+        aguja = texto.strip().lower()
+        if not aguja:
+            # devolver el historial entero haria pensar que todo coincide
+            return [], 0
+
+        with self._lock:
+            filas = self._con.execute(
+                "SELECT * FROM flows ORDER BY id DESC").fetchall()
+
+        salida: list[Flow] = []
+        total = 0
+        for fila in filas:
+            flujo = self._fila_a_flow(fila)
+            if not self._coincide_en_todo(flujo, aguja):
+                continue
+            total += 1
+            if limite is None or len(salida) < limite:
+                salida.append(flujo)
+        return (salida[::-1] if ascendente else salida), total
+
+    @staticmethod
+    def _coincide_en_todo(flujo: Flow, aguja: str) -> bool:
+        r = flujo.request
+        if aguja in r.url.lower():
+            return True
+        for k, v in r.headers:
+            if aguja in k.lower() or aguja in v.lower():
+                return True
+        if aguja in r.body.decode("utf-8", "replace").lower():
+            return True
+
+        p = flujo.response
+        if p is None:
+            return False
+        for k, v in p.headers:
+            if aguja in k.lower() or aguja in v.lower():
+                return True
+        # decoded_body ya aguanta un cuerpo corrupto o binario
+        return aguja in p.decoded_body().decode("utf-8", "replace").lower()
+
     def count_flows(
         self,
         *,

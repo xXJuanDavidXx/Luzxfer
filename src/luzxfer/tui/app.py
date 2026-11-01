@@ -97,6 +97,7 @@ class LuzxferApp(App):
         Binding("b", "barrido", "barrido activo", id="barrido"),
         Binding("w", "cobertura", "cobertura WSTG", id="cobertura"),
         Binding("f", "foco_filtro", "filtrar", id="foco_filtro"),
+        Binding("slash", "buscar", "buscar en todo", id="buscar"),
         Binding("m", "marcar", "marcar", id="marcar"),
         Binding("n", "nota", "nota", id="nota"),
         Binding("v", "confirmar", "confirmar", id="confirmar"),
@@ -151,6 +152,9 @@ class LuzxferApp(App):
         self.engine: Builtin | None = None
         self._flujo_actual: Flow | None = None
         self._filtro = ""
+        # el filtro mira solo la URL y es barato; la busqueda
+        # mira dentro de todo y cuesta, asi que se pide aparte
+        self.busqueda_profunda = False
         self.vista_combinada = False
         self.cuerpo_bonito = True
 
@@ -414,7 +418,14 @@ class LuzxferApp(App):
     def _coincide(self, f: Flow) -> bool:
         if self.solo_alcance and not self.alcance.dentro(f.request.url):
             return False
-        return not self._filtro or self._filtro.lower() in f.request.url.lower()
+        if not self._filtro:
+            return True
+        if self.busqueda_profunda:
+            # en vivo se mira solo la URL: descomprimir el cuerpo de cada
+            # peticion que entra convertiria el proxy en un cuello de
+            # botella. La busqueda completa se rehace al teclear.
+            return self._filtro.lower() in f.request.url.lower()
+        return self._filtro.lower() in f.request.url.lower()
 
     @staticmethod
     def _agregar_fila(tabla: DataTable, f: Flow) -> None:
@@ -456,8 +467,12 @@ class LuzxferApp(App):
         tabla = self.query_one("#flujos", DataTable)
         elegido = self._flujo_actual.id if self._flujo_actual else None
         tabla.clear()
-        flujos = self.store.list_flows(texto=self._filtro, ascendente=True,
+        if self.busqueda_profunda and self._filtro:
+            flujos = self.store.buscar(self._filtro, ascendente=True,
                                        limite=LIMITE_TABLA)
+        else:
+            flujos = self.store.list_flows(texto=self._filtro, ascendente=True,
+                                           limite=LIMITE_TABLA)
         if self.solo_alcance:
             flujos = [f for f in flujos if self.alcance.dentro(f.request.url)]
         for f in flujos:
@@ -494,7 +509,11 @@ class LuzxferApp(App):
         # se distinguen los dos motivos de ver menos de lo que hay: que
         # no quepa y que este fuera de alcance no son lo mismo, y un solo
         # mensaje para ambos haria pensar en el que no es
-        if self.solo_alcance:
+        if self.busqueda_profunda and self._filtro:
+            hay = self.store.contar_busqueda(self._filtro)
+            piezas += [(f"buscando en todo: {mostrados} de {hay}", P.especial),
+                       ("  ·  ", P.separador)]
+        elif self.solo_alcance:
             piezas += [(f"solo alcance: {mostrados} de {total}", P.info),
                        ("  ·  ", P.separador)]
         elif mostrados < total:
@@ -607,7 +626,28 @@ class LuzxferApp(App):
 
     # ------------------------------------------------------------------ acciones
     def action_foco_filtro(self) -> None:
-        self.query_one("#filtro", Input).focus()
+        self._modo_filtro(profunda=False)
+
+    def action_buscar(self) -> None:
+        """Busca el texto en TODO: URL, cabeceras y cuerpos.
+
+        Va en una tecla aparte y no en el mismo filtro porque cuesta
+        distinto: filtrar por URL es una consulta SQL, y buscar dentro
+        de los cuerpos obliga a descomprimirlos uno a uno. Mezclarlos
+        haria que teclear en el filtro se volviera lento sin que se
+        entienda por que.
+        """
+        self._modo_filtro(profunda=True)
+
+    def _modo_filtro(self, *, profunda: bool) -> None:
+        campo = self.query_one("#filtro", Input)
+        if self.busqueda_profunda != profunda:
+            self.busqueda_profunda = profunda
+            campo.placeholder = ("buscar en url, cabeceras y cuerpos…  (/)"
+                                 if profunda else "filtrar por url…  (f)")
+            self.refrescar_tabla()
+            self.actualizar_estado()
+        campo.focus()
 
     def action_quitar_foco(self) -> None:
         self.query_one("#flujos", DataTable).focus()

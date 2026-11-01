@@ -58,6 +58,9 @@ experiencia de quien ya usaba la herramienta.
 ## [No publicado]
 
 ### Añadido
+- **Buscar en todo el tráfico** (`/`): url, cabeceras y cuerpos, de la
+  petición y de la respuesta. Descomprime para buscar, porque un `LIKE`
+  de SQL no encuentra nada dentro de un gzip y parecería funcionar.
 - **Atajos configurables** en `~/.config/luzxfer/config.ini`, sección
   `[teclas]`, por nombre de acción. El pie se regenera solo, así que la
   ayuda no se desincroniza.

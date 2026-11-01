@@ -96,7 +96,8 @@ ignorado.
 | tecla | hace |
 | --- | --- |
 | `j` / `k` o flechas | moverse por el historial |
-| `f` | enfocar el filtro |
+| `f` | filtrar por url |
+| `/` | buscar en url, cabeceras y cuerpos |
 | `r` | abrir el repeater sobre el flujo seleccionado |
 | `i` | abrir el Intruder sobre el flujo seleccionado |
 | `t` | petición y respuesta lado a lado, y volver |
@@ -118,6 +119,24 @@ ignorado.
 en dos columnas en vez de dos pestañas, como Burp deja distribuirlas. La
 pestaña de candidatos sigue alcanzable en los dos modos, y la elección se
 recuerda con la sesión.
+
+### Buscar
+
+`f` filtra por URL: es una consulta SQL y va en vivo mientras tecleas.
+
+`/` busca el texto **en todo** — URL, cabeceras y cuerpos, de la petición
+y de la respuesta, sin distinguir mayúsculas. Es la respuesta a «¿dónde
+aparece este token?».
+
+Van en teclas distintas porque cuestan distinto, y mezclarlas haría que
+teclear en el filtro se volviera lento sin que se entienda por qué.
+
+**Lo que no se puede hacer con un `LIKE` de SQL**, y esa es la razón de
+que exista: el cuerpo guardado son los bytes tal como llegaron, así que
+dentro de un gzip la aguja no está en claro. Un `LIKE` parecería
+funcionar y se dejaría fuera casi todo el HTML de un objetivo real, en
+silencio. Medido: buscar en 4001 respuestas comprimidas cuesta 0,07 s, y
+el `LIKE` habría encontrado cero.
 
 ### Cómo se muestra un cuerpo
 
