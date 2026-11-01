@@ -20,6 +20,17 @@ experiencia de quien ya usaba la herramienta.
   `no pedido` —existen porque algo más abajo se pidió— que son los que
   vale la pena probar a mano. `enter` lleva al flujo en el historial.
   Respeta el alcance si está filtrando.
+- **Interceptación en vuelo** (`x`): parar una petición antes de que salga,
+  editarla y soltarla, o descartarla. Es lo que separa la herramienta de un
+  visor de tráfico: el repeater manda una *segunda* petición, y contra un
+  token de un solo uso eso no sirve.
+  - Arranca apagada; una petición detenida es una pestaña que no carga.
+  - Si nadie contesta en 120 s la petición sale sola, y al apagar o cerrar
+    se suelta todo lo detenido: nunca queda nadie colgado.
+  - Editar el `Host` no cambia el destino, para poder probar inyección por
+    Host header. Descartar corta la conexión sin contestar.
+  - Avisa antes de perder en silencio un payload con espacios en la línea
+    de petición.
 
 ## [0.3.0] — 2026-11-01
 

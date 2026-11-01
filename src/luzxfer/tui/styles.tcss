@@ -336,3 +336,18 @@ Button.-primary:hover {
 #mapa-titulo { height: 1; margin-bottom: 1; }
 
 #mapa { height: 1fr; }
+
+/* interceptacion */
+#itc-caja {
+    width: 88%;
+    height: 82%;
+    background: #0e1016;
+    border: round #e05c5c;
+    padding: 1 2;
+}
+
+#itc-titulo { height: 1; margin-bottom: 1; }
+
+#int-crudo { height: 1fr; }
+
+#itc-ayuda { height: 1; margin-top: 1; }

@@ -119,8 +119,12 @@ class Interceptor:
         Puede no estar porque venció el timeout mientras se decidía, y
         eso no es un error: es la carrera normal entre las dos partes.
         """
+        # se saca de la cola AQUI y no cuando el hilo del motor despierte.
+        # Dejarselo a el abria una carrera: la interfaz repintaba antes
+        # de que el otro hilo corriera, volvia a ver la misma peticion
+        # arriba y parecia que soltar no hacia nada.
         with self._lock:
-            d = self._paradas.get(id_)
+            d = self._paradas.pop(id_, None)
             if d is None:
                 return
             d.accion = accion
@@ -135,6 +139,7 @@ class Interceptor:
         """
         with self._lock:
             paradas = list(self._paradas.values())
+            self._paradas.clear()
         for d in paradas:
             d.accion = SOLTAR
             d.editado = None

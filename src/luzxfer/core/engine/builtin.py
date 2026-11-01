@@ -121,6 +121,13 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             metodo, ruta, salida, cuerpo = _descomponer(
                 final, metodo, ruta, salida, cuerpo)
+            # la URL del Flow tiene que seguir a la ruta editada. Sin
+            # esto el historial guardaba la peticion ORIGINAL aunque
+            # saliera otra: en un pentest eso no es un detalle de
+            # pintado, es evidencia falsa. El destino NO se recalcula a
+            # proposito, para que editar el Host siga siendo una prueba
+            # de inyeccion y no un cambio de objetivo.
+            url = _con_otra_ruta(url, ruta)
 
         req = Request(method=metodo, url=url, headers=salida, body=cuerpo,
                       http_version=self.request_version)
@@ -313,3 +320,12 @@ def _descomponer(texto: str, metodo: str, ruta: str,
     if cue or m in ("POST", "PUT", "PATCH"):
         cab.append(("Content-Length", str(len(cue))))
     return m, r, cab, cue
+
+
+def _con_otra_ruta(url: str, ruta: str) -> str:
+    """La misma URL con otra ruta y query. Conserva esquema y destino."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    p = urlsplit(url)
+    camino, _, consulta = ruta.partition("?")
+    return urlunsplit((p.scheme, p.netloc, camino, consulta, ""))

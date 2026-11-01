@@ -23,8 +23,9 @@ from ..core.engine import Builtin, puerto_libre
 from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import alcance as alc
-from ..core.tools import cuerpo, detector, sitemap
+from ..core.tools import cuerpo, detector, intercepta, sitemap
 from .screens.alcance import AlcanceScreen, sugerencia_desde
+from .screens.intercepta import InterceptaScreen
 from .screens.intruder import IntruderScreen
 from .screens.nota import NotaScreen
 from .screens.repeater import RepeaterScreen
@@ -75,6 +76,7 @@ class LuzxferApp(App):
         Binding("i", "intruder", "intruder"),
         Binding("a", "alcance", "alcance"),
         Binding("e", "mapa", "mapa del sitio"),
+        Binding("x", "interceptar", "interceptar"),
         Binding("f", "foco_filtro", "filtrar"),
         Binding("m", "marcar", "marcar"),
         Binding("n", "nota", "nota"),
@@ -120,6 +122,9 @@ class LuzxferApp(App):
         self.cuerpo_bonito = True
         self.alcance = alc.Alcance([])
         self.solo_alcance = False
+        # apagada de salida: encenderla sola seria colgarle el
+        # navegador a alguien que no lo pidio
+        self.interceptor = intercepta.Interceptor(self._detenida_desde_hilo)
 
     # ------------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -241,6 +246,7 @@ class LuzxferApp(App):
             host=self.host_proxy, port=self.port_proxy, upstream=self.upstream,
             filtrar_encoding=self.filtrar_encoding,
             filtrar_cache=self.filtrar_cache,
+            interceptor=self.interceptor,
         )
         self.engine.start()
         destino = f" → {self.upstream}" if self.upstream else ""
@@ -380,6 +386,12 @@ class LuzxferApp(App):
             piezas += [(f"mostrando {mostrados} de {total}", "#e05c5c"),
                        ("  ·  ", "#39404f")]
 
+        if self.interceptor.activa:
+            # tiene que verse: olvidarse de que esta encendida es
+            # quedarse mirando un navegador que no carga
+            n = len(self.interceptor.pendientes())
+            piezas += [(f"INTERCEPTA{f' ({n})' if n else ''}", "bold #e05c5c"),
+                       ("  ·  ", "#39404f")]
         piezas.append(
             (motor, "#6fcf8f" if self.engine and self.engine.running else "#e05c5c"))
         self.query_one("#estado", Static).update(Text.assemble(*piezas))
@@ -503,6 +515,37 @@ class LuzxferApp(App):
         self.actualizar_estado()
         return errores
 
+    def action_interceptar(self) -> None:
+        if self.interceptor.activa and self.interceptor.pendientes():
+            # con cosas esperando, x es «enseñamelas» y no «apaga»:
+            # apagar por error soltaria lo que ibas a editar
+            self._mostrar_detenida()
+            return
+        self.interceptor.activa = not self.interceptor.activa
+        if not self.interceptor.activa:
+            self.interceptor.soltar_todas()
+        else:
+            self.notify("interceptacion encendida: el navegador se para "
+                        "en cada peticion", title="x la apaga", timeout=6)
+        self.actualizar_estado()
+
+    def _detenida_desde_hilo(self, d) -> None:
+        """Llamado DESDE el hilo del motor: hay que saltar al bucle."""
+        self.call_from_thread(self._mostrar_detenida)
+
+    def _mostrar_detenida(self) -> None:
+        pantalla = self.screen
+        if isinstance(pantalla, InterceptaScreen):
+            pantalla.refrescar()
+            return
+        if pantalla is self.screen_stack[0]:
+            self.push_screen(InterceptaScreen(self.interceptor))
+        else:
+            # hay otra pantalla encima; avisar es mejor que arrancarle al
+            # analista lo que estuviera haciendo
+            self.notify("hay una peticion detenida; x para verla",
+                        severity="warning")
+
     def action_mapa(self) -> None:
         """El mapa se arma de lo que ya se capturo, sin pedirle nada al
         servidor: esto ordena, no rastrea."""
@@ -618,6 +661,9 @@ class LuzxferApp(App):
 
     # ------------------------------------------------------------------
     def on_unmount(self) -> None:
+        # primero el interceptor: si quedara algo detenido, el hilo del
+        # motor seguiria esperando una decision que ya nadie va a tomar
+        self.interceptor.cerrar()
         if self.engine:
             self.engine.stop()
         self.store.close()

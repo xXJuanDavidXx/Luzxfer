@@ -9,8 +9,8 @@ contra qué endpoints, ata los hallazgos al tráfico que los demuestra, y
 conserva ese estado entre sesiones.
 
 > **Estado: alfa.** Funcionan el núcleo, las sesiones con nombre, el
-> historial, el repeater y el Intruder. Faltan el sitemap, el alcance, la
-> interceptación en vuelo y la matriz de cobertura WSTG. Ver el roadmap,
+> historial, el repeater, el Intruder, el alcance, el mapa del sitio y la
+> interceptación en vuelo. Falta la matriz de cobertura WSTG. Ver el roadmap,
 > y [CHANGELOG.md](CHANGELOG.md) para lo que cambió en cada versión.
 
 ---
@@ -105,6 +105,7 @@ ignorado.
 | `v` | confirmar el candidato seleccionado como hallazgo |
 | `a` | alcance: qué entra en el contrato |
 | `e` | mapa del sitio |
+| `x` | interceptar: parar las peticiones antes de que salgan |
 | `s` | sesiones |
 | `c` | limpiar el historial (los candidatos se conservan) |
 | `g` / `G` | primer / último flujo |
@@ -193,6 +194,53 @@ Los resultados **no entran al historial**: van a su propia tabla dentro de la
 sesión. Diez mil peticiones volverían el historial inservible para lo que es,
 y el detector correría sobre las diez mil generando miles de candidatos
 basura.
+
+## Interceptación
+
+`x` la enciende y la apaga. **Arranca apagada**: encenderla sola sería
+colgarte el navegador sin que lo hubieras pedido, porque una petición
+detenida es una pestaña que no carga.
+
+Con ella encendida, cada petición se para **después** de los retoques del
+proxy y **antes** de salir, así que lo que ves es exactamente lo que va a
+viajar:
+
+```
+[ INTERCEPTACION: ON ]   cola: 3
+
+POST /api/login HTTP/1.1
+Host: objetivo.com
+Content-Type: application/json
+
+{"user":"admin","pass":"x"}
+
+ctrl+f soltar · ctrl+d descartar · ctrl+x apagar · esc cerrar
+```
+
+Los atajos llevan `ctrl` aunque sean más largos de teclear: esto es un
+editor, y una `f` suelta escribiría una `f`.
+
+Esto es lo que separa luzxfer de un visor de tráfico. El repeater manda
+una **segunda** petición; contra un token de un solo uso, un CSRF que se
+quema o un pago irrepetible, eso no sirve. Aquí el servidor nunca ve la
+original.
+
+**Editar el `Host` no cambia a dónde va la petición.** Es deliberado: así
+se prueba inyección por Host header. **Descartar corta la conexión sin
+contestar**, que es lo que descartar significa — inventar una respuesta
+falsearía lo que el cliente cree que pasó.
+
+Dos salvaguardas, porque una petición detenida es tráfico tuyo retenido:
+
+- Si nadie contesta en 120 segundos, **la petición sale sola**. Dejarte el
+  navegador colgado para siempre es peor que dejar pasar algo.
+- Al apagar la interceptación o cerrar la herramienta, todo lo detenido
+  sale. Nunca queda nada esperando una decisión que ya no va a llegar.
+
+Una línea de petición HTTP son tres partes separadas por espacios, así que
+un payload con espacios se corta al reenviar. Se avisa antes de mandarlo y
+se puede insistir: la última palabra es tuya, puede que estés probando
+justo eso.
 
 ## Mapa del sitio
 

@@ -351,3 +351,230 @@ def _resolver_cuando_llegue(i, que_hacer, espera=8.0):
                 i.resolver(d.id, intercepta.SOLTAR, que_hacer(d.crudo))
             return
         time.sleep(0.01)
+
+
+# ------------------------------------------------- la interfaz (tecla x)
+async def test_la_interceptacion_arranca_apagada():
+    """Encenderla sola seria colgarle el navegador a alguien que no lo
+    pidio: una peticion detenida es una pestaña que no carga."""
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.interceptor.activa is False
+
+
+async def test_la_tecla_x_enciende_y_apaga():
+    from textual.widgets import Static
+
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("x")
+        await pilot.pause()
+        assert app.interceptor.activa is True
+        # tiene que verse: olvidarse de que esta encendida cuelga el navegador
+        assert "INTERCEPTA" in app.query_one("#estado", Static).render().plain.upper()
+
+        await pilot.press("x")
+        await pilot.pause()
+        assert app.interceptor.activa is False
+        assert "INTERCEPTA" not in app.query_one("#estado", Static).render().plain.upper()
+
+
+async def test_al_detener_algo_se_abre_la_pantalla_con_la_peticion():
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intercepta import InterceptaScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.press("x")
+        await pilot.pause()
+        _, h = _en_hilo(lambda: app.interceptor.detener(CRUDO))
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if isinstance(app.screen, InterceptaScreen):
+                break
+        assert isinstance(app.screen, InterceptaScreen)
+        assert "GET /x" in app.screen.query_one("#int-crudo", TextArea).text
+        app.interceptor.soltar_todas()
+        h.join(timeout=3)
+
+
+async def test_ctrl_f_suelta_lo_editado():
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intercepta import InterceptaScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.press("x")
+        await pilot.pause()
+        caja, h = _en_hilo(lambda: app.interceptor.detener(CRUDO))
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if isinstance(app.screen, InterceptaScreen):
+                break
+        app.screen.query_one("#int-crudo", TextArea).text = \
+            "GET /editado HTTP/1.1\r\nHost: o.com\r\n\r\n"
+        await pilot.press("ctrl+f")
+        h.join(timeout=3)
+        assert "/editado" in caja["r"]
+
+
+async def test_ctrl_d_descarta():
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intercepta import InterceptaScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.press("x")
+        await pilot.pause()
+        caja, h = _en_hilo(lambda: app.interceptor.detener(CRUDO))
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if isinstance(app.screen, InterceptaScreen):
+                break
+        await pilot.press("ctrl+d")
+        h.join(timeout=3)
+        assert caja["r"] is None
+
+
+async def test_la_pantalla_pasa_a_la_siguiente_de_la_cola():
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intercepta import InterceptaScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.press("x")
+        await pilot.pause()
+        hilos = [_en_hilo(lambda n=n: app.interceptor.detener(
+            f"GET /r{n} HTTP/1.1\r\nHost: o.com\r\n\r\n")) for n in range(2)]
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if len(app.interceptor.pendientes()) == 2:
+                break
+        assert isinstance(app.screen, InterceptaScreen)
+        assert "/r0" in app.screen.query_one("#int-crudo", TextArea).text
+
+        await pilot.press("ctrl+f")
+        await pilot.pause(0.1)
+        assert "/r1" in app.screen.query_one("#int-crudo", TextArea).text
+
+        await pilot.press("ctrl+f")
+        for _, h in hilos:
+            h.join(timeout=3)
+
+
+async def test_apagar_desde_la_pantalla_suelta_lo_que_haya():
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intercepta import InterceptaScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.press("x")
+        await pilot.pause()
+        caja, h = _en_hilo(lambda: app.interceptor.detener(CRUDO))
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if isinstance(app.screen, InterceptaScreen):
+                break
+        await pilot.press("ctrl+x")
+        h.join(timeout=3)
+        assert caja["r"] == CRUDO
+        assert app.interceptor.activa is False
+
+
+async def test_cerrar_la_aplicacion_no_deja_a_nadie_colgado():
+    from luzxfer.tui.app import LuzxferApp
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.interceptor.activa = True
+        caja, h = _en_hilo(lambda: app.interceptor.detener(CRUDO))
+        for _ in range(100):
+            if app.interceptor.pendientes():
+                break
+            await pilot.pause(0.02)
+    # al salir del contexto la app se desmonta
+    h.join(timeout=3)
+    assert not h.is_alive(), "un hilo del motor quedo esperando para siempre"
+    assert caja["r"] == CRUDO
+
+
+def test_el_historial_guarda_lo_que_se_mando_y_no_lo_que_llego(eco):
+    """Encontrado probando contra un objetivo real.
+
+    La peticion editada salia bien, pero el Flow que se guardaba llevaba
+    la URL ORIGINAL: editabas en vuelo y la herramienta archivaba como
+    evidencia algo que nunca mandaste. En un pentest eso no es un bug de
+    presentacion, es evidencia falsa.
+    """
+    import http.client
+    import socket
+
+    from luzxfer.core.engine import Builtin
+    i = intercepta.Interceptor()
+    i.activa = True
+    h, p = eco
+    cap = []
+    m = Builtin(cap.append, port=0, upstream=f"http://{h}:{p}", interceptor=i)
+    m.start()
+    puerto = m._srv.server_address[1]
+    threading.Thread(
+        target=_resolver_cuando_llegue,
+        args=(i, lambda c: c.replace("/eco?q=original", "/eco?q=EDITADO")),
+        daemon=True).start()
+    try:
+        s = socket.create_connection(("127.0.0.1", puerto), timeout=10)
+        s.sendall(PETICION)
+        r = http.client.HTTPResponse(s)
+        r.begin()
+        r.read()
+        s.close()
+        time.sleep(0.4)
+    finally:
+        m.stop()
+
+    f = cap[0]
+    assert "EDITADO" in f.request.url, "el historial miente sobre lo que salio"
+    assert "original" not in f.request.url
+    assert f.request.path == "/eco?q=EDITADO"
+
+
+async def test_avisa_si_la_linea_de_peticion_lleva_espacios():
+    """Encontrado probando a mano: al editar q=apple por q=' OR 1=1--,
+    solo viajo hasta la comilla. Es correcto —una linea de peticion HTTP
+    no lleva espacios sin codificar— pero se perdia EN SILENCIO, y
+    perder en silencio parte de lo que el analista escribio es la clase
+    de fallo que mas cuesta en esta herramienta."""
+    from textual.widgets import Static, TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intercepta import InterceptaScreen
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.press("x")
+        await pilot.pause()
+        caja, h = _en_hilo(lambda: app.interceptor.detener(CRUDO))
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if isinstance(app.screen, InterceptaScreen):
+                break
+
+        app.screen.query_one("#int-crudo", TextArea).text = (
+            "GET /buscar?q=' OR 1=1-- HTTP/1.1\r\nHost: o.com\r\n\r\n")
+        await pilot.press("ctrl+f")
+        await pilot.pause()
+
+        # no se suelta: se avisa y se deja corregir
+        assert isinstance(app.screen, InterceptaScreen)
+        aviso = app.screen.query_one("#itc-ayuda", Static).render().plain
+        assert "espacio" in aviso.lower()
+        assert "r" not in caja, "no debe haberse soltado todavia"
+
+        # insistir la suelta igual: la ultima palabra es del analista
+        await pilot.press("ctrl+f")
+        h.join(timeout=3)
+        assert caja["r"] is not None
