@@ -99,6 +99,8 @@ class LuzxferApp(App):
     BINDINGS = [
         Binding("question_mark", "ayuda", "teclas", id="ayuda"),
         Binding("r", "repeater", "repeater", id="repeater"),
+        Binding("R", "repeater_enviar", "enviar al repeater",
+                show=False, id="repeater_enviar"),
         Binding("x", "interceptar", "interceptar", id="interceptar"),
         Binding("slash", "buscar", "buscar", id="buscar"),
         Binding("w", "cobertura", "cobertura", id="cobertura"),
@@ -717,6 +719,12 @@ class LuzxferApp(App):
         self.push_screen(AyudaScreen(self.atajos()))
 
     def action_repeater(self) -> None:
+        # abrir el banco de trabajo tal como esta. Meter aqui el flujo
+        # marcado mezclaba abrir con enviar: no se podia mirar el banco
+        # sin ensuciarlo con la peticion que estuviera debajo del cursor.
+        self.push_screen(RepeaterScreen(self.store))
+
+    def action_repeater_enviar(self) -> None:
         if self._flujo_actual is None:
             self.notify("selecciona un flujo primero", severity="warning")
             return
