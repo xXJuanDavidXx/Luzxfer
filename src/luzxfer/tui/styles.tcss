@@ -143,21 +143,21 @@ RepeaterScreen {
     margin-bottom: 1;
 }
 
-#rep-editor {
+.rep-editor {
     height: 1fr;
     background: $lx-fondo;
     color: $lx-texto;
     border: tall $lx-borde;
 }
 
-#rep-editor:focus {
+.rep-editor:focus {
     border: tall $lx-acento;
 }
 
 /* El borde y el alto van en el contenedor con scroll; la salida crece con
    su contenido. Con height: 1fr en la salida, una respuesta larga quedaba
    cortada al alto visible y no habia nada que desplazar. */
-#rep-scroll {
+.rep-scroll {
     height: 1fr;
     background: $lx-fondo;
     border: tall $lx-borde;
@@ -167,7 +167,14 @@ RepeaterScreen {
     scrollbar-size: 1 1;
 }
 
-#rep-salida {
+/* Sin esto, mover el foco al panel de respuesta no cambiaba nada en
+   pantalla, asi que no habia forma de notar que se podia desplazar: la
+   respuesta larga parecia cortada por abajo. */
+.rep-scroll:focus {
+    border: tall $lx-acento;
+}
+
+.rep-salida {
     height: auto;
     background: $lx-fondo;
     color: $lx-cuerpo;

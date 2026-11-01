@@ -5,6 +5,24 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Corregido
+- **En el repeater «a veces no se veía la respuesta completa, se cortaba
+  la parte de abajo»** (reportado por el usuario). No se cortaba: era
+  inalcanzable. El foco arranca en el editor, `pagedown` y `end` van al
+  editor, y al panel de respuesta solo se llega con `tab`, que no estaba
+  documentado en ningún sitio.
+  - Encima, los selectores de la hoja de estilos (`#rep-editor`,
+    `#rep-scroll`, `#rep-salida`) apuntaban a ids que dejaron de existir
+    cuando el repeater pasó a pestañas: los widgets reales se llaman
+    `ed-1`, `scroll-1`, `out-1`. Las reglas no afectaban a nada, así que
+    **ningún panel mostraba el foco** y no había manera de notar que se
+    había movido ni de sospechar que la respuesta se podía desplazar.
+  - Ahora los widgets llevan clases, las reglas enganchan, el panel con
+    el foco se ve distinto y la pista del título empieza por
+    `tab editor/respuesta`.
+
 ## [0.7.0] — 2026-11-01
 
 ### Corregido

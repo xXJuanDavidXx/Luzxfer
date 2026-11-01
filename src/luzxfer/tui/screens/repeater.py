@@ -77,9 +77,16 @@ class RepeaterScreen(ModalScreen):
         tabs = self.query_one("#rep-tabs", TabbedContent)
         pane = TabPane(fila["titulo"] or f"#{rid}", id=f"rep-{rid}")
         tabs.add_pane(pane)
-        pane.mount(TextArea(fila["crudo"], id=f"ed-{rid}", soft_wrap=False))
-        pane.mount(VerticalScroll(Static("", id=f"out-{rid}"),
-                                  id=f"scroll-{rid}"))
+        # las clases son lo que engancha con la hoja de estilos: el id
+        # lleva el numero de pestaña, asi que un selector por id solo
+        # vale para una. Cuando el repeater paso a pestañas, el CSS se
+        # quedo apuntando a #rep-editor y companiia y dejo de aplicarse
+        # a nada, que es por lo que la respuesta salia cortada.
+        pane.mount(TextArea(fila["crudo"], id=f"ed-{rid}", soft_wrap=False,
+                            classes="rep-editor"))
+        pane.mount(VerticalScroll(
+            Static("", id=f"out-{rid}", classes="rep-salida"),
+            id=f"scroll-{rid}", classes="rep-scroll"))
         tabs.active = f"rep-{rid}"
 
     def _pintar_titulo(self) -> None:
@@ -91,8 +98,13 @@ class RepeaterScreen(ModalScreen):
                 ("repeater", f"bold {P.acento}"),
                 (f"  ·  {n} pestaña{'' if n == 1 else 's'}", P.secundario),
                 (f"  ·  {saltos}", P.info if self.seguir else P.tenue),
-                ("   ctrl+s enviar · ctrl+w cerrar pestaña · "
-                 "ctrl+r redirecciones · esc cerrar", P.tenue),
+                # `tab` va primero a proposito: sin saberlo, una
+                # respuesta mas alta que el panel parece cortada, porque
+                # el foco se queda en el editor y no hay forma de
+                # desplazarla
+                ("   tab editor/respuesta · ctrl+s enviar · "
+                 "ctrl+w cerrar pestaña · ctrl+r redirecciones · "
+                 "esc cerrar", P.tenue),
             )
         )
 
