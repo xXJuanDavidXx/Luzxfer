@@ -450,3 +450,24 @@ Button.-primary:hover {
 #det-titulo { height: 1; margin-bottom: 1; }
 
 #det-peticion { height: 1fr; border: round $lx-borde; }
+
+/* cargar payloads en el intruder */
+#pay-caja {
+    width: 80;
+    max-width: 96%;
+    height: auto;
+    background: $lx-modal;
+    border: round $lx-acento;
+    padding: 1 2;
+}
+
+#pay-titulo { margin-bottom: 1; }
+
+.pay-fila { height: 3; margin-bottom: 1; }
+
+/* los cuatro campos del rango estrechos para que el boton no se salga
+   por la derecha: si no cabe en pantalla, el raton tampoco lo alcanza */
+#pay-desde, #pay-hasta, #pay-paso, #pay-ancho { width: 12; }
+#pay-ruta { width: 1fr; }
+
+#pay-aviso { height: auto; color: $lx-peligro; }

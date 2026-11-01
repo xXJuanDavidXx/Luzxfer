@@ -22,6 +22,7 @@ from ...core.models import Flow
 from ...core.tools import intruder, repeater
 from ..paleta import P
 from .intruder_detalle import DetalleResultadoScreen
+from .intruder_payloads import CargarPayloadsScreen
 
 AVISO_GRANDE = 1000
 
@@ -35,6 +36,7 @@ class IntruderScreen(ModalScreen):
         # deberia parecerse a cerrar el programa
         Binding("ctrl+x", "abortar", "abortar"),
         Binding("ctrl+o", "ordenar", "ordenar por largo"),
+        Binding("ctrl+y", "cargar_payloads", "cargar payloads", priority=True),
     ]
 
     def __init__(self, flujo: Flow):
@@ -55,8 +57,8 @@ class IntruderScreen(ModalScreen):
                 Text.assemble(
                     ("intruder", f"bold {P.acento}"),
                     (f"  ·  flujo {self.flujo.id}", P.secundario),
-                    ("   ctrl+m marcar · ctrl+l lanzar · ctrl+x abortar · "
-                     "enter ver la peticion · esc cerrar",
+                    ("   ctrl+m marcar · ctrl+y payloads · ctrl+l lanzar · "
+                     "ctrl+x abortar · enter ver la peticion · esc cerrar",
                      P.tenue),
                 ),
                 id="int-titulo",
@@ -75,6 +77,7 @@ class IntruderScreen(ModalScreen):
                                 id="int-grep")
                     with Horizontal(id="int-botones"):
                         yield Button("lanzar", variant="primary", id="int-lanzar")
+                        yield Button("cargar", id="int-cargar")
                         yield Button("abortar", id="int-abortar")
             yield Static("", id="int-estado")
             yield DataTable(id="int-resultados", cursor_type="row")
@@ -280,9 +283,26 @@ class IntruderScreen(ModalScreen):
         self.action_abortar()      # no dejar un ataque suelto al cerrar
         self.dismiss()
 
+    def action_cargar_payloads(self) -> None:
+        """Abre el cargador y mete lo que devuelva en el area de payloads."""
+        self.app.push_screen(CargarPayloadsScreen(), self._insertar_payloads)
+
+    def _insertar_payloads(self, payloads: list[str] | None) -> None:
+        if not payloads:
+            return                        # se cancelo, o no habia nada
+        area = self.query_one("#int-payloads", TextArea)
+        actual = area.text
+        # no pisar lo que ya hay: se añade debajo, con un salto si hace falta
+        nuevo = "\n".join(payloads)
+        area.text = f"{actual}\n{nuevo}" if actual.strip() else nuevo
+        self._refrescar_total()
+        self.notify(f"{len(payloads)} payload(s) cargados", timeout=4)
+
     def on_button_pressed(self, ev: Button.Pressed) -> None:
         if ev.button.id == "int-lanzar":
             self.action_lanzar()
+        elif ev.button.id == "int-cargar":
+            self.action_cargar_payloads()
         elif ev.button.id == "int-abortar":
             self.action_abortar()
 
