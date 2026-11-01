@@ -15,11 +15,22 @@ from urllib.parse import parse_qs, urlsplit
 
 from ..models import Finding, Flow
 
-CABECERAS_SEGURIDAD = (
-    "content-security-policy",
-    "x-content-type-options",
-    "x-frame-options",
-    "referrer-policy",
+# Las cabeceras de seguridad se agrupan por la prueba WSTG que les
+# corresponde DE VERDAD, no por la que haga que la matriz parezca mas
+# completa. Un informe que dice «se probo CONF-07» porque faltaba un CSP
+# miente sobre lo que se hizo, y el cliente va a buscar ese ID en el
+# documento oficial.
+#
+#   X-Frame-Options  -> clickjacking, que si tiene prueba propia
+#   HSTS             -> CONF-07, y solo tiene sentido sobre https
+#   el resto         -> endurecimiento sin prueba WSTG propia en la v4.2,
+#                       asi que se reporta sin ID en vez de tomar uno
+#                       prestado
+GRUPOS_CABECERAS = (
+    (("x-frame-options",), ["WSTG-CLNT-09"], "defensa contra clickjacking"),
+    (("strict-transport-security",), ["WSTG-CONF-07"], "HSTS"),
+    (("content-security-policy", "x-content-type-options",
+      "referrer-policy"), [], "endurecimiento (sin prueba WSTG propia)"),
 )
 
 # Valores demasiado cortos o comunes generan ruido sin aportar senal.
@@ -32,7 +43,6 @@ RUIDO = frozenset({
 WSTG = {
     "REFLEJO": ["WSTG-INPV-01", "WSTG-INPV-02"],
     "COOKIE": ["WSTG-SESS-02"],
-    "CABECERA": ["WSTG-CONF-07"],
     "FUGA": ["WSTG-INFO-02", "WSTG-INFO-08"],
     "ERROR": ["WSTG-ERRH-01"],
 }
@@ -97,11 +107,18 @@ def analizar(flow: Flow) -> list[Finding]:
     host = flow.request.host
     if "text/html" in flow.response.content_type:
         presentes = {k.lower() for k, _ in flow.response.headers}
-        faltan = [h for h in CABECERAS_SEGURIDAD if h not in presentes]
-        if faltan:
+        es_tls = url.startswith("https://")
+        for cabeceras, ids, etiqueta in GRUPOS_CABECERAS:
+            # HSTS en claro no significa nada: reclamarlo seria ruido
+            if "strict-transport-security" in cabeceras and not es_tls:
+                continue
+            faltan = [c for c in cabeceras if c not in presentes]
+            if not faltan:
+                continue
             hallazgos.append(Finding(
-                kind="CABECERA", detail=f"faltan: {', '.join(faltan)}",
-                url=host, flow_ids=fid, wstg=WSTG["CABECERA"],
+                kind="CABECERA",
+                detail=f"{etiqueta}: faltan {', '.join(faltan)}",
+                url=host, flow_ids=fid, wstg=list(ids),
                 extra={"faltan": faltan},
             ))
 
