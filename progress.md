@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Bitácora de avance de **luzxfer 0.2.0**. Última verificación: **2026-10-31**.
+Bitácora de avance de **luzxfer 0.3.0**. Última verificación: **2026-11-01**.
 
 Este archivo dice en qué punto está la herramienta de verdad: qué está hecho y
 comprobado, qué está a medias, y qué falta. No repite el README (qué es la
@@ -15,9 +15,9 @@ Todo esto se corrió en esta máquina, no es recuerdo de la última sesión:
 
 | comprobación | resultado |
 | --- | --- |
-| `./venv/bin/python -m pytest` | **136 pasan**, ~34 s, sin fallos ni saltados |
+| `./venv/bin/python -m pytest` | **248 pasan**, ~53 s, sin fallos ni saltados |
 | `./venv/bin/ruff check src tests` | **limpio**, `All checks passed!` |
-| `luzxfer --version` | `luzxfer 0.2.0` |
+| `luzxfer --version` | `luzxfer 0.3.0` |
 | sesiones, de punta a punta | 7 flujos, salir, volver sin argumentos, 7 flujos |
 | brotli, contra Juice Shop real | `br` ilegible → `gzip` legible al filtrar |
 | vista combinada | izquierda x=2 ancho 66, derecha x=72 ancho 66 |
@@ -26,6 +26,19 @@ Todo esto se corrió en esta máquina, no es recuerdo de la última sesión:
 sistema tiene pytest pero no textual, y el venv tiene las dos cosas.
 
 ---
+
+## Qué cambió en la 0.3.0
+
+- **Intruder completo**, cuatro modos, con ritmo prudente de fábrica y
+  resultados en tablas aparte del historial. Ver `CHANGELOG.md`.
+- **Presentación del cuerpo** según lo que es: JSON indentado, binarios
+  resumidos, `p` para el crudo.
+- **Cacería de bugs**, nueve sospechas: cuatro reales, tres descartadas con
+  motivo por escrito, dos que eran agujeros de cobertura. La peor fue el
+  charset ignorado, que hacía invisible cualquier reflejo con acentos.
+
+El detalle versión por versión está en [CHANGELOG.md](CHANGELOG.md), que
+hasta la 0.2.0 figuraba aquí como deuda.
 
 ## Qué cambió en la 0.2.0
 
@@ -115,6 +128,10 @@ El orden y su razonamiento están en `docs/direccion.md`. Resumido:
 Detectado probando la 0.2.0 contra OWASP Juice Shop el **2026-10-31**. Se
 atiende cuando mejor encaje con el desarrollo, no de inmediato.
 
+**Dos de los tres se resolvieron** en la 0.3.0: el `.woff` (ahora los
+binarios se resumen con volcado hexadecimal) y las redirecciones, que
+resultaron ser 304 de caché y no redirecciones. Queda:
+
 1. **Pestañas del repeater.** Hoy es un modal que pierde el estado al
    cerrarlo. Burp guarda una pestaña numerada por petición, con su respuesta,
    y las conserva. Encaja natural después del Intruder, porque las dos
@@ -144,8 +161,11 @@ atiende cuando mejor encaje con el desarrollo, no de inmediato.
    índice de memoria compartida aunque solo se lea, y una conexión de solo
    lectura no puede borrarlo. Basura inofensiva que limpia la siguiente
    conexión de escritura; documentada en el docstring de `resumen()`.
-5. **No hay un `CHANGELOG.md`.** Con dos versiones y un tag ya empieza a hacer
-   falta; los mensajes de commit lo suplen por ahora.
+5. **El detector lee el cuerpo entero sin límite.** 50 MB cuestan 0,07 s pero
+   131 MB de pico. **Se deja así a propósito:** recortar crearía falsos
+   negativos —un reflejo más allá del corte dejaría de verse—, que es la
+   clase de fallo contra la que pelea medio proyecto. Documentado, no
+   arreglado.
 
 ---
 

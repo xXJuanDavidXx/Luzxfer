@@ -10,7 +10,8 @@ conserva ese estado entre sesiones.
 
 > **Estado: alfa.** Funcionan el núcleo, las sesiones con nombre, el
 > historial, el repeater y el Intruder. Faltan el sitemap, el alcance, la
-> interceptación en vuelo y la matriz de cobertura WSTG. Ver el roadmap.
+> interceptación en vuelo y la matriz de cobertura WSTG. Ver el roadmap,
+> y [CHANGELOG.md](CHANGELOG.md) para lo que cambió en cada versión.
 
 ---
 
@@ -293,6 +294,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [ ] Matriz de cobertura WSTG y generación de informes
 - [ ] Adaptador de motor mitmproxy
 - [ ] API de plugins
+- [ ] Personalización: temas, colores, atajos configurables
 
 `docs/direccion.md` tiene el razonamiento detrás de ese orden, y por qué la
 IA está aplazada en vez de planificada.

@@ -105,9 +105,14 @@ en cada píxel de analítica y cada CDN — inusable.
 6. Matriz WSTG y reporte   la razon de ser declarada
 7. Adaptador mitmproxy     la interfaz Engine ya esta lista
 8. API de plugins
+9. Personalizacion: temas, colores, atajos configurables
 
    IA: aplazada sin fecha, por la decision 3.
 ```
+
+La **personalización** es deliberadamente lo último: una herramienta que se
+puede pintar de otro color pero no sabe interceptar una petición no es una
+alternativa a Burp. Se planifica cuando el resto esté hecho.
 
 **El Intruder subió al puesto 2 el 2026-10-31**, por encima de scope y de
 interceptación, y conviene saber por qué para no revertirlo sin pensar:
@@ -164,6 +169,22 @@ Tomadas antes de escribir una línea, para no rediscutirlas a mitad:
    10.000 filas vuelven el historial inservible para lo que es, y el detector
    correría sobre las 10.000 generando miles de candidatos basura. Lo que
    valga se promueve al historial a mano.
+
+## Cómo se trabaja (2026-11-01)
+
+Reglas de proceso que pidió el usuario, no de diseño:
+
+1. **Una rama por cambio.** Se trabaja en una rama con nombre, y se funde a
+   `main` **solo cuando todo está estable**: suite verde, `ruff` limpio y
+   comprobado a mano cuando toca.
+2. **`main` no se queda atrás.** La contrapartida de la regla 1, y nace de un
+   susto real: el 2026-10-31 el usuario estuvo depurando un 304 ya corregido
+   porque su árbol estaba en `main` mientras el arreglo vivía en una rama
+   lateral, 17 commits por delante. Una rama que tarda en fundirse es una
+   trampa, así que se funde en cuanto está verde y no «cuando acabe todo».
+3. **La personalización va al final.** Temas, colores, atajos configurables:
+   no es prioridad. Queda anotada en el roadmap para planificarla cuando el
+   núcleo esté completo, y no antes.
 
 ## Bitácora
 
