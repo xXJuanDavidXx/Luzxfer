@@ -19,11 +19,11 @@ Se puede cambiar desde `~/.config/luzxfer/config.ini`:
 """
 from __future__ import annotations
 
-import configparser
-import os
 import re
 from dataclasses import dataclass, fields
 from pathlib import Path
+
+from .ajustes import leer_ini
 
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -116,13 +116,6 @@ class _Actual:
 P = _Actual()
 
 
-def ruta_config() -> Path:
-    """Donde vive la configuracion. No la crea."""
-    xdg = os.environ.get("XDG_CONFIG_HOME", "")
-    base = Path(xdg) if xdg and Path(xdg).is_absolute() else Path.home() / ".config"
-    return base / "luzxfer" / "config.ini"
-
-
 def leer(ruta: Path | None = None) -> tuple[Paleta, list[str]]:
     """La paleta configurada y los problemas encontrados.
 
@@ -130,16 +123,9 @@ def leer(ruta: Path | None = None) -> tuple[Paleta, list[str]]:
     es un dedazo en un archivo de texto, no una razon para no arrancar
     una herramienta de trabajo.
     """
-    ruta = ruta or ruta_config()
-    avisos: list[str] = []
-    if not ruta.is_file():
+    cfg, avisos = leer_ini(ruta)
+    if cfg is None:
         return OSCURO, avisos
-
-    cfg = configparser.ConfigParser()
-    try:
-        cfg.read(ruta, encoding="utf-8")
-    except (OSError, configparser.Error) as e:
-        return OSCURO, [f"{ruta}: no se pudo leer — {e}"]
 
     nombre = cfg.get("tema", "nombre", fallback="oscuro").strip().lower()
     base = TEMAS.get(nombre)

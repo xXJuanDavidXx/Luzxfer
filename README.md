@@ -500,6 +500,30 @@ Un color mal escrito **avisa y se ignora**; el resto del archivo se
 aplica igual. Un dedazo en un archivo de texto no es razón para no poder
 arrancar una herramienta de trabajo.
 
+### Atajos
+
+En el mismo archivo, por nombre de acción:
+
+```ini
+[teclas]
+intruder = ctrl+i
+barrido  = ctrl+b
+```
+
+Las acciones son las de la pantalla principal: `salir`, `repeater`,
+`intruder`, `sesiones`, `alcance`, `mapa`, `interceptar`, `barrido`,
+`cobertura`, `foco_filtro`, `marcar`, `nota`, `confirmar`, `vista`,
+`cuerpo`, `limpiar`, `arriba`, `abajo`, `cursor_arriba`, `cursor_abajo`,
+`quitar_foco`. **El pie de la pantalla se regenera solo**, así que la
+ayuda nunca se queda diciendo la tecla de antes.
+
+Si dos acciones piden la misma tecla, se avisa y se dice **cuál se
+queda**; la otra conserva la suya en vez de quedarse muerta. Una acción
+que no existe se ignora con la lista de las que sí. Nada de esto impide
+arrancar, y `salir` sigue funcionando pase lo que pase: quedarte
+encerrado en el programa por un error de tecleo sería el peor resultado
+posible.
+
 ## Plugins
 
 Un plugin es un `.py` en `~/.local/share/luzxfer/plugins/` que define
@@ -590,8 +614,7 @@ tu red. Si necesitas llegar desde otra máquina, haz un túnel por SSH.
 - [x] Matriz de cobertura WSTG y generación de informes
 - [x] Adaptador de motor mitmproxy
 - [x] API de plugins
-- [x] Personalización: temas y colores
-- [ ] Personalización: atajos de teclado configurables
+- [x] Personalización: temas, colores y atajos configurables
 
 `docs/direccion.md` tiene el razonamiento detrás de ese orden, y por qué la
 IA está aplazada en vez de planificada.

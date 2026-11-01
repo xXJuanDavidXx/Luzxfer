@@ -105,11 +105,16 @@ def test_un_archivo_corrupto_no_impide_arrancar(tmp_path):
 
 
 def test_la_ruta_respeta_xdg(monkeypatch, tmp_path):
+    """La ruta vive en ajustes.py, que es el unico que sabe abrir el
+    archivo: la paleta y los atajos lo comparten para no acabar con dos
+    lectores que se van separando."""
+    from luzxfer.tui import ajustes
+
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    assert paleta.ruta_config() == tmp_path / "luzxfer" / "config.ini"
+    assert ajustes.ruta_config() == tmp_path / "luzxfer" / "config.ini"
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     from pathlib import Path
-    assert paleta.ruta_config() == Path.home() / ".config" / "luzxfer" / "config.ini"
+    assert ajustes.ruta_config() == Path.home() / ".config" / "luzxfer" / "config.ini"
 
 
 def test_cargar_cambia_la_paleta_del_programa(tmp_path):

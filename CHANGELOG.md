@@ -57,7 +57,13 @@ experiencia de quien ya usaba la herramienta.
 
 ## [No publicado]
 
-Nada todavía.
+### Añadido
+- **Atajos configurables** en `~/.config/luzxfer/config.ini`, sección
+  `[teclas]`, por nombre de acción. El pie se regenera solo, así que la
+  ayuda no se desincroniza.
+  - Un conflicto entre dos acciones avisa y dice cuál se queda; la otra
+    conserva su tecla en vez de quedarse muerta.
+  - `salir` sigue funcionando pase lo que pase.
 
 ## [0.5.0] — 2026-11-01
 

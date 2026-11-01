@@ -27,7 +27,7 @@ from ..core.models import Flow
 from ..core.store import Store
 from ..core.tools import alcance as alc
 from ..core.tools import cuerpo, dast, detector, intercepta, sitemap
-from . import paleta
+from . import paleta, teclas
 from .paleta import P
 from .screens.alcance import AlcanceScreen, sugerencia_desde
 from .screens.cobertura import CoberturaScreen
@@ -87,27 +87,27 @@ class LuzxferApp(App):
     TITLE = "luzxfer"
 
     BINDINGS = [
-        Binding("q", "quit", "salir"),
-        Binding("r", "repeater", "repeater"),
-        Binding("s", "sesiones", "sesiones"),
-        Binding("i", "intruder", "intruder"),
-        Binding("a", "alcance", "alcance"),
-        Binding("e", "mapa", "mapa del sitio"),
-        Binding("x", "interceptar", "interceptar"),
-        Binding("b", "barrido", "barrido activo"),
-        Binding("w", "cobertura", "cobertura WSTG"),
-        Binding("f", "foco_filtro", "filtrar"),
-        Binding("m", "marcar", "marcar"),
-        Binding("n", "nota", "nota"),
-        Binding("v", "confirmar", "confirmar"),
-        Binding("t", "vista", "vista"),
-        Binding("p", "cuerpo", "crudo/bonito"),
-        Binding("c", "limpiar", "limpiar"),
-        Binding("g", "arriba", "inicio", show=False),
-        Binding("G", "abajo", "final", show=False),
-        Binding("j", "cursor_abajo", "abajo", show=False),
-        Binding("k", "cursor_arriba", "arriba", show=False),
-        Binding("escape", "quitar_foco", "", show=False),
+        Binding("q", "quit", "salir", id="salir"),
+        Binding("r", "repeater", "repeater", id="repeater"),
+        Binding("s", "sesiones", "sesiones", id="sesiones"),
+        Binding("i", "intruder", "intruder", id="intruder"),
+        Binding("a", "alcance", "alcance", id="alcance"),
+        Binding("e", "mapa", "mapa del sitio", id="mapa"),
+        Binding("x", "interceptar", "interceptar", id="interceptar"),
+        Binding("b", "barrido", "barrido activo", id="barrido"),
+        Binding("w", "cobertura", "cobertura WSTG", id="cobertura"),
+        Binding("f", "foco_filtro", "filtrar", id="foco_filtro"),
+        Binding("m", "marcar", "marcar", id="marcar"),
+        Binding("n", "nota", "nota", id="nota"),
+        Binding("v", "confirmar", "confirmar", id="confirmar"),
+        Binding("t", "vista", "vista", id="vista"),
+        Binding("p", "cuerpo", "crudo/bonito", id="cuerpo"),
+        Binding("c", "limpiar", "limpiar", id="limpiar"),
+        Binding("g", "arriba", "inicio", show=False, id="arriba"),
+        Binding("G", "abajo", "final", show=False, id="abajo"),
+        Binding("j", "cursor_abajo", "abajo", show=False, id="cursor_abajo"),
+        Binding("k", "cursor_arriba", "arriba", show=False, id="cursor_arriba"),
+        Binding("escape", "quitar_foco", "", show=False, id="quitar_foco"),
     ]
 
     def __init__(
@@ -142,6 +142,7 @@ class LuzxferApp(App):
         self.plugins = plug.Registro()
         self._errores_plugins: list[str] = []
         self._fallos_avisados = 0
+        self._avisos_teclas: list[str] = []
         self._siguiendo = True
         self._pendiente_final = False
         if cargar_plugins:
@@ -152,6 +153,15 @@ class LuzxferApp(App):
         self._filtro = ""
         self.vista_combinada = False
         self.cuerpo_bonito = True
+
+        # Los atajos se remapean con el mecanismo de Textual, que
+        # regenera el pie solo: asi la ayuda no puede quedarse diciendo
+        # la tecla de antes. Lo que no se entiende se ignora y se avisa,
+        # porque quedarse sin poder salir del programa por un dedazo en
+        # un archivo de texto seria el peor resultado posible.
+        mapa, self._avisos_teclas = teclas.leer()
+        if mapa:
+            self.set_keymap(mapa)
         self.alcance = alc.Alcance([])
         self.solo_alcance = False
         # apagada de salida: encenderla sola seria colgarle el
@@ -216,6 +226,9 @@ class LuzxferApp(App):
             self.store.get_meta("alcance"))
         self.solo_alcance = self.store.get_meta("solo_alcance") == "si"
 
+        for aviso in self._avisos_teclas:
+            self.notify(aviso, title="atajos",
+                        severity="warning", timeout=12)
         for err in self._errores_plugins:
             self.notify(err, title="plugin con problemas",
                         severity="error", timeout=12)
