@@ -586,3 +586,76 @@ async def test_ctrl_o_ordena_por_largo(eco):
         await pilot.pause()
         largos = [int(str(tabla.get_row_at(f)[3])) for f in range(tabla.row_count)]
         assert largos == sorted(largos)
+
+
+# ------------------- sospechas 2 y 3: confiar en el flujo en vez del editor
+async def test_si_editas_el_host_a_un_puerto_tls_el_ataque_usa_tls(eco):
+    """Sospecha 2. tls salia de la URL del flujo ORIGINAL, no de la
+    peticion que de verdad vas a mandar. Editas el Host a un objetivo
+    HTTPS y el ataque entero sale en claro contra un puerto TLS: falla
+    raro, no falla claro."""
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))        # el flujo es http://
+        s = app.screen
+        s.query_one("#int-editor", TextArea).text = (
+            "GET /x?q=§X§ HTTP/1.1\r\nHost: otro.ejemplo:443\r\n\r\n")
+        s.query_one("#int-payloads", TextArea).text = "a"
+        await pilot.pause()
+        assert s._config().tls is not False, \
+            "mandaria en claro contra el 443 porque el flujo original era http"
+
+
+async def test_si_no_tocas_el_host_se_respeta_el_esquema_del_flujo(eco):
+    """Un Host sin puerto no dice si es TLS. Mientras el objetivo sea el
+    mismo, el esquema del flujo original es la mejor pista que hay."""
+    from textual.widgets import DataTable
+
+    from luzxfer.core.models import Flow, Request, Response
+    from luzxfer.tui.app import LuzxferApp
+    f = Flow(request=Request(method="GET", url="https://seguro.ejemplo/x",
+                             headers=[("Host", "seguro.ejemplo")]),
+             response=Response(status=200, body=b"ok"))
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        app._ingresar(f)
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        await pilot.press("i")
+        await pilot.pause()
+        app.screen.query_one("#int-payloads").text = "a"
+        app.screen.query_one("#int-editor").text = (
+            "GET /x?q=§X§ HTTP/1.1\r\nHost: seguro.ejemplo\r\n\r\n")
+        await pilot.pause()
+        assert app.screen._config().tls is True
+
+
+async def test_el_ataque_se_archiva_contra_el_host_al_que_de_verdad_fue(eco):
+    """Sospecha 3. add_ataque guardaba el host del flujo original, pero el
+    ataque va a donde diga el Host editado. Quedaria archivado contra el
+    objetivo equivocado, y eso es evidencia de un pentest."""
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    h, p = eco
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        await _abrir(app, pilot, _flujo_a(h, p))
+        s = app.screen
+        # el Host editado apunta a OTRO sitio que el del flujo original
+        s.query_one("#int-editor", TextArea).text = (
+            "GET /x?q=§X§ HTTP/1.1\r\nHost: otro.ejemplo:8099\r\n\r\n")
+        s.query_one("#int-payloads", TextArea).text = "uno"
+        await pilot.press("ctrl+l")
+        for _ in range(80):
+            await pilot.pause(0.1)
+            if s.ataque and s.ataque.terminado:
+                break
+        await pilot.pause(0.2)
+        # se archiva contra el destino real, no contra el flujo de origen
+        assert app.store.list_ataques()[0]["host"] == "otro.ejemplo:8099"

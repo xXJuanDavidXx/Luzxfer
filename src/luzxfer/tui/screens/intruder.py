@@ -19,7 +19,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Input, Select, Static, TextArea
 
 from ...core.models import Flow
-from ...core.tools import intruder
+from ...core.tools import intruder, repeater
 
 AVISO_GRANDE = 1000
 
@@ -94,8 +94,47 @@ class IntruderScreen(ModalScreen):
             modo=self.query_one("#int-modo", Select).value,
             conjuntos=intruder.conjuntos_desde_texto(texto),
             grep=grep,
-            tls=self.flujo.request.url.startswith("https://"),
+            tls=self._tls(),
         )
+
+    def _destino(self) -> tuple[str, int] | None:
+        """A donde va la peticion EDITADA, que no tiene por que ser a
+        donde fue el flujo del que salimos."""
+        try:
+            _, _, _, cabeceras, _ = repeater.parse_raw(
+                self.query_one("#int-editor", TextArea).text)
+        except repeater.ErrorPeticion:
+            return None
+        return repeater.destino_de(cabeceras)
+
+    def _tls(self) -> bool | None:
+        """Si el ataque va por TLS. None = que lo decida el puerto.
+
+        El esquema del flujo original solo se impone mientras el objetivo
+        siga siendo el mismo. En cuanto editas el Host, de donde saliste
+        ya no dice nada sobre a donde vas: un flujo http:// apuntado a un
+        443 mandaria el ataque entero en claro contra un puerto TLS, y eso
+        falla raro en vez de fallar claro.
+
+        Un Host sin puerto no revela el esquema, y por eso no basta con
+        mirar el puerto siempre: contra el mismo objetivo, el flujo es la
+        mejor pista que hay.
+        """
+        destino = self._destino()
+        original = self.flujo.request.host.split(":")[0]
+        if destino is None or destino[0] == original:
+            return self.flujo.request.url.startswith("https://")
+        return None
+
+    def _etiqueta_destino(self) -> str:
+        """Contra quien se archiva el ataque: el destino real, no el del
+        flujo original. Un ataque guardado contra el objetivo equivocado
+        es evidencia de pentest mal atribuida."""
+        destino = self._destino()
+        if destino is None:
+            return self.flujo.request.host
+        host, puerto = destino
+        return host if puerto in (80, 443) else f"{host}:{puerto}"
 
     def _preparar(self) -> intruder.Ataque:
         """Construye el ataque. Lanza ErrorAtaque si algo no cuadra."""
@@ -195,7 +234,7 @@ class IntruderScreen(ModalScreen):
         tabla = self.query_one("#int-resultados", DataTable)
         tabla.clear()
         self._ataque_id = self.app.store.add_ataque(
-            a.cfg.modo.value, self.flujo.request.host,
+            a.cfg.modo.value, self._etiqueta_destino(),
             self.query_one("#int-editor", TextArea).text, a.total)
         self._estado(f"lanzando… 0/{a.total}", "#f0a93b")
         self._correr(a)
