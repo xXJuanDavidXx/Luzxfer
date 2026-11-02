@@ -1,3 +1,3 @@
 """luzxfer — proxy de interceptacion y banco de trabajo de pentesting web para la terminal."""
 
-__version__ = "0.13.0"
+__version__ = "0.13.1"
