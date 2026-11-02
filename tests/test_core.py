@@ -67,6 +67,47 @@ def objetivo():
     srv.server_close()
 
 
+@pytest.fixture(scope="module")
+def objetivo_tls(tmp_path_factory):
+    """El mismo servidor de pruebas, pero por HTTPS con un certificado
+    autofirmado. send_raw no valida el certificado (CERT_NONE), asi que
+    sirve para probar que el handshake TLS ocurre contra el puerto real."""
+    import datetime
+    import ssl
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    d = tmp_path_factory.mktemp("tls")
+    clave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    nombre = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "127.0.0.1")])
+    ahora = datetime.datetime.now(datetime.UTC)
+    cert = (x509.CertificateBuilder()
+            .subject_name(nombre).issuer_name(nombre)
+            .public_key(clave.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(ahora - datetime.timedelta(days=1))
+            .not_valid_after(ahora + datetime.timedelta(days=1))
+            .sign(clave, hashes.SHA256()))
+    cert_p, clave_p = d / "cert.pem", d / "clave.pem"
+    cert_p.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    clave_p.write_bytes(clave.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption()))
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Objetivo)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(str(cert_p), str(clave_p))
+    srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_address
+    srv.shutdown()
+    srv.server_close()
+
+
 # ----------------------------------------------------------------- modelos
 def test_request_raw_reconstruye_la_peticion():
     r = Request(method="POST", url="http://ej.com:8099/api/login",
@@ -578,3 +619,52 @@ def test_count_resultados_acompana_al_limite(tmp_path):
     assert len(st.list_resultados(aid, limite=10)) == 10
     assert st.count_resultados(aid + 99) == 0
     st.close()
+
+
+# ----------------------------------------- resolver_destino (tls/puerto)
+def test_resolver_https_sin_puerto_va_al_443():
+    """El bug del lab: Host sin puerto + pestaña https salia al 80 con TLS
+    y reventaba con WRONG_VERSION_NUMBER."""
+    h, p, tls = repeater.resolver_destino(
+        None, None, True, [("Host", "lab.web-security-academy.net")])
+    assert (h, p, tls) == ("lab.web-security-academy.net", 443, True)
+
+
+def test_resolver_http_sin_puerto_va_al_80():
+    h, p, tls = repeater.resolver_destino(
+        None, None, False, [("Host", "o.com")])
+    assert (p, tls) == (80, False)
+
+
+def test_resolver_puerto_443_en_el_host_implica_tls():
+    _h, p, tls = repeater.resolver_destino(None, None, None, [("Host", "o.com:443")])
+    assert (p, tls) == (443, True)
+
+
+def test_resolver_puerto_raro_en_el_host_no_es_tls():
+    _h, p, tls = repeater.resolver_destino(None, None, None, [("Host", "o.com:8099")])
+    assert (p, tls) == (8099, False)
+
+
+def test_resolver_sin_puerto_ni_pista_es_http_llano():
+    _h, p, tls = repeater.resolver_destino(None, None, None, [("Host", "o.com")])
+    assert (p, tls) == (80, False)
+
+
+def test_resolver_el_puerto_explicito_manda_sobre_el_host():
+    h, p, _tls = repeater.resolver_destino(
+        "otro.com", 9000, None, [("Host", "o.com:443")])
+    assert (h, p) == ("otro.com", 9000)
+
+
+def test_un_https_sin_puerto_no_revienta_con_wrong_version(objetivo_tls):
+    """De extremo a extremo contra un servidor TLS local: antes esto daba
+    SSLError WRONG_VERSION_NUMBER porque conectaba al 80 y envolvia en TLS."""
+    host, puerto = objetivo_tls
+    # el Host lleva el puerto real del servidor de pruebas, pero forzamos
+    # tls=True como hace una pestaña https; lo que se prueba es que con
+    # tls=True el esquema y el handshake van juntos
+    crudo = f"GET /x HTTP/1.1\r\nHost: {host}:{puerto}\r\n\r\n"
+    f = repeater.send_raw(crudo, tls=True)
+    assert "WRONG_VERSION_NUMBER" not in f.error
+    assert f.error == "" and f.status == 200

@@ -5,6 +5,18 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Corregido
+- **El repeater y el Intruder reventaban con `SSL: WRONG_VERSION_NUMBER`
+  contra un objetivo https cuyo `Host` no llevaba puerto** (reportado por el
+  usuario contra un lab de PortSwigger). El puerto por defecto se fijaba a
+  80 cuando el `Host` no lo traia y luego se envolvia en TLS igual: un
+  handshake TLS contra el puerto 80. Ahora el TLS decide el puerto por
+  defecto —443 con TLS, 80 sin él—, y un puerto explicito en el `Host` se
+  respeta. La decisión vive en `resolver_destino`, con tests que la fijan
+  caso por caso y un servidor TLS de pruebas para el camino completo.
+
 ## [0.9.2] — 2026-11-01
 
 ### Corregido
