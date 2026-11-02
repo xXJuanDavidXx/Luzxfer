@@ -233,6 +233,11 @@ class IntruderScreen(ModalScreen):
             self._estado(str(e), P.peligro)
             return
 
+        # avisar una vez de HTTP/2, no por peticion: esto habla HTTP/1.1
+        aviso = repeater.aviso_http2(self.query_one("#int-editor", TextArea).text)
+        if aviso:
+            self.notify(aviso, severity="warning", timeout=6)
+
         # ultima barrera antes de mandar peticiones a un sistema ajeno
         if a.total > AVISO_GRANDE and not self._confirmado:
             self._confirmado = True

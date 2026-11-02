@@ -127,6 +127,27 @@ def build_raw(
     return ("\r\n".join(lineas) + "\r\n\r\n").encode("latin-1", "replace") + cuerpo
 
 
+def aviso_http2(texto: str) -> str | None:
+    """Avisa si la peticion pide HTTP/2 o 3. Devuelve None si no hay nada.
+
+    El repeater y el Intruder hablan HTTP/1.1 sobre un socket crudo: no
+    negocian h2. Una version 2 o 3 en la linea de peticion —lo que copia un
+    navegador de un sitio moderno— viaja tal cual, y el servidor casi seguro
+    contesta 400 o algo raro. No se reescribe sola: «lo que escribes es lo
+    que viaja», y la decision de bajarla a HTTP/1.1 es del analista. Esto
+    solo lo dice, para que un 400 no parezca un misterio.
+    """
+    try:
+        _m, _r, version, *_ = parse_raw(texto)
+    except ErrorPeticion:
+        return None
+    v = version.upper()
+    if v.startswith(("HTTP/2", "HTTP/3")):
+        return (f"la peticion dice {version} y esto habla HTTP/1.1; cambia la "
+                f"version a HTTP/1.1 o el servidor contestara raro")
+    return None
+
+
 def send_raw(
     texto: str,
     *,

@@ -668,3 +668,26 @@ def test_un_https_sin_puerto_no_revienta_con_wrong_version(objetivo_tls):
     f = repeater.send_raw(crudo, tls=True)
     assert "WRONG_VERSION_NUMBER" not in f.error
     assert f.error == "" and f.status == 200
+
+
+# ----------------------------------------------- aviso_http2
+def test_aviso_http2_detecta_la_version():
+    crudo = "GET /x HTTP/2.0\r\nHost: o.com\r\n\r\n"
+    aviso = repeater.aviso_http2(crudo)
+    assert aviso and "HTTP/2.0" in aviso and "HTTP/1.1" in aviso
+
+
+def test_aviso_http2_tambien_con_http3():
+    assert repeater.aviso_http2("GET /x HTTP/3\r\nHost: o.com\r\n\r\n")
+
+
+def test_aviso_http2_calla_con_http11():
+    assert repeater.aviso_http2("GET /x HTTP/1.1\r\nHost: o.com\r\n\r\n") is None
+
+
+def test_aviso_http2_calla_con_http10():
+    assert repeater.aviso_http2("GET /x HTTP/1.0\r\nHost: o.com\r\n\r\n") is None
+
+
+def test_aviso_http2_no_revienta_con_basura():
+    assert repeater.aviso_http2("basura") is None

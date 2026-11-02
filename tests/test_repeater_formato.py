@@ -104,3 +104,35 @@ async def test_la_barra_de_botones_cae_dentro_de_la_caja():
             assert boton.region.bottom <= caja.region.bottom, (
                 f"el boton '{boton.id}' se sale de la caja: "
                 f"{boton.region} fuera de {caja.region}")
+
+
+async def test_avisa_de_http2_al_enviar_pero_igual_envia():
+    """El bug que trajo esto: el navegador copia HTTP/2.0 y el repeater
+    habla HTTP/1.1. Se avisa, pero la ultima palabra es del analista, asi
+    que el envio sigue adelante."""
+    from textual.widgets import DataTable
+
+    from luzxfer.core.models import Flow, Request, Response
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(140, 44)) as pilot:
+        app._ingresar(Flow(
+            request=Request(method="GET", url="http://o.com/x",
+                            headers=[("Host", "o.com")], http_version="HTTP/2.0"),
+            response=Response(status=200, body=b"ok")))
+        await pilot.pause()
+        app.query_one("#flujos", DataTable).move_cursor(row=0)
+        await pilot.pause()
+        await pilot.press("R")
+        await pilot.pause()
+        pant = app.screen
+        assert "HTTP/2" in pant.editor_actual().text
+
+        avisos = []
+        app.notify = lambda msg, **kw: avisos.append((msg, kw))
+        enviados = []
+        pant._enviar_en_hilo = lambda rid, crudo: enviados.append(crudo)
+
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        assert avisos and "HTTP/1.1" in avisos[0][0], "tiene que avisar"
+        assert enviados, "y aun asi enviar: la ultima palabra es del analista"
