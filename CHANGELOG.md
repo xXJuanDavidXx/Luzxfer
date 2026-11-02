@@ -5,6 +5,18 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Corregido
+- **El informe WSTG podía salir con tablas rotas si un hallazgo traía un
+  `|` o un salto de línea.** La tabla de candidatos escapaba el `|` del
+  detalle pero no el de la URL, y ninguna celda aplanaba saltos de línea;
+  el encabezado y el «Dónde» de los confirmados tampoco. Un `|` en una
+  query —válido— añadía una columna, y un `\n` de contenido reflejado o de
+  un plugin partía la fila en dos. El informe va a un cliente, así que sale
+  roto justo donde tenía que verse serio. Ahora todos los campos derivados
+  del servidor pasan por un escape común (`|`, `\` y saltos de línea).
+
 ## [0.11.0] — 2026-11-01
 
 ### Añadido
