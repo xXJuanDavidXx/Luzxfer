@@ -25,11 +25,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from urllib.parse import parse_qsl, urlencode
 
 from ..models import Finding
 from . import repeater
 from .alcance import Alcance
+from .dast_puntos import Punto, _partes, con_payload, puntos
 from .ritmo import Acelerador
 
 # Un marcador que no sale por casualidad en una respuesta y que no lleva
@@ -46,14 +46,6 @@ class SinPuntos(ValueError):
 
 
 @dataclass(slots=True)
-class Punto:
-    nombre: str
-    valor: str
-    donde: str          # "query" o "cuerpo"
-    indice: int         # cual, si el nombre se repite
-
-
-@dataclass(slots=True)
 class Prueba:
     nombre: str
     titulo: str
@@ -61,70 +53,6 @@ class Prueba:
     wstg: list[str]
     # (cuerpo, estado, cabeceras_en_minuscula) -> motivo, o None
     evalua: Callable[[str, int, dict], str | None]
-
-
-# ------------------------------------------------------- puntos y payload
-def _partes(crudo: str):
-    metodo, ruta, version, cabeceras, cuerpo = repeater.parse_raw(crudo)
-    camino, _, consulta = ruta.partition("?")
-    return metodo, camino, consulta, version, cabeceras, cuerpo
-
-
-def _es_formulario(cabeceras: list[tuple[str, str]]) -> bool:
-    for k, v in cabeceras:
-        if k.lower() == "content-type":
-            return "x-www-form-urlencoded" in v.lower()
-    return False
-
-
-def puntos(crudo: str) -> list[Punto]:
-    """Dónde se puede inyectar: query y cuerpo de formulario.
-
-    JSON todavía no: fingir que se sabe, partiéndolo como si fuera un
-    formulario, mandaría basura al servidor y daría resultados que no
-    significan nada.
-    """
-    try:
-        _m, _c, consulta, _v, cabeceras, cuerpo = _partes(crudo)
-    except repeater.ErrorPeticion:
-        return []
-
-    salida: list[Punto] = []
-    for i, (k, v) in enumerate(parse_qsl(consulta, keep_blank_values=True)):
-        salida.append(Punto(nombre=k, valor=v, donde="query", indice=i))
-    if cuerpo and _es_formulario(cabeceras):
-        texto = cuerpo.decode("utf-8", "replace")
-        for i, (k, v) in enumerate(parse_qsl(texto, keep_blank_values=True)):
-            salida.append(Punto(nombre=k, valor=v, donde="cuerpo", indice=i))
-    return salida
-
-
-def con_payload(crudo: str, punto: Punto, payload: str) -> str:
-    """La misma petición con ese parámetro sustituido.
-
-    Se codifica con urlencode: un payload con espacios o comillas
-    partiría la línea de petición, y entonces no llegaría lo que se
-    quería probar sino un trozo.
-    """
-    metodo, camino, consulta, version, cabeceras, cuerpo = _partes(crudo)
-
-    def _cambiado(texto: str) -> str:
-        pares = parse_qsl(texto, keep_blank_values=True)
-        pares[punto.indice] = (punto.nombre, payload)
-        return urlencode(pares)
-
-    if punto.donde == "query":
-        consulta = _cambiado(consulta)
-    else:
-        cuerpo = _cambiado(cuerpo.decode("utf-8", "replace")).encode()
-        cabeceras = [(k, v) for k, v in cabeceras
-                     if k.lower() != "content-length"]
-        cabeceras.append(("Content-Length", str(len(cuerpo))))
-
-    ruta = f"{camino}?{consulta}" if consulta else camino
-    lineas = [f"{metodo} {ruta} {version}"]
-    lineas += [f"{k}: {v}" for k, v in cabeceras]
-    return "\r\n".join(lineas) + "\r\n\r\n" + cuerpo.decode("utf-8", "replace")
 
 
 # --------------------------------------------------------------- pruebas

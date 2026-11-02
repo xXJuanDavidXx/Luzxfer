@@ -325,3 +325,28 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   sostengo que contradice la decision 3 de este documento, la que aplazo la
   IA por sacar datos del cliente de su perimetro), y si la FASE F
   (nuclei/nikto) se corta.
+- **2026-11-02** — Resueltas las dos decisiones abiertas del DAST 10/10.
+  Yo habia propuesto exigir self-host para el OOB; **el operador lo corrigio
+  y tiene razon**: exigir montar un servidor excluye a quien no tiene tiempo
+  ni dinero, y convierte una capacidad en un privilegio.
+  **El modo no se elige de una lista: sale de si hay servidor configurado.**
+  Sin configurar nada, el OOB va contra el publico (opt-out). Configurar un
+  servidor ES el acto de optar por entrar (opt-in). Nada de "perfiles" ni de
+  preguntarle al analista en que caso de uso esta: el ya lo sabe.
+  **Lo que si se conserva de la objecion:** el riesgo real de la decision 3
+  no era que existiera la opcion, era que se activara *por descuido*. Asi
+  que activar OOB es deliberado, el canal se elige explicitamente, y mientras
+  este activo se ve en pantalla contra que servidor se trabaja. Esa
+  visibilidad es la diferencia entre «lo decidio el analista» y «se activo
+  solo».
+  **FASE F cortada como estaba escrita:** nuclei y nikto eran ejemplos, y
+  atar el diseno a dos binarios concretos era el error. El caso de uso
+  —aprovechar herramientas que el analista ya tenga— se replantea desde cero
+  y por la **API de plugins que ya existe**, no como fase del nucleo: un
+  plugin que envuelve una herramienta es justo para lo que esa API se hizo,
+  se instala solo si se quiere y su cobertura queda fuera del Youden por
+  construccion.
+  **La rama `termux` si tiene motivo para divergir algun dia**, y no es el
+  que yo supuse: no son los extras, es la **UX en pantalla de telefono**.
+  Eso se piensa aparte; hasta entonces la rama sigue siendo solo un punto
+  conocido-bueno.
