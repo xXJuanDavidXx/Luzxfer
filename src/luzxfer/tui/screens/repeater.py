@@ -159,6 +159,11 @@ class RepeaterScreen(ModalScreen):
         except repeater.ErrorPeticion as e:
             salida.update(Text(f"peticion invalida\n\n{e}", style=P.peligro))
             return
+        # avisar de HTTP/2 pero no bloquear: la ultima palabra es del
+        # analista, y un 400 por la version no deberia parecer un misterio
+        aviso = repeater.aviso_http2(crudo)
+        if aviso:
+            self.notify(aviso, severity="warning", timeout=6)
         # lo editado se guarda al enviar: si cierras despues, sigue ahi
         self.store.set_repeticion(rid, crudo)
         self._enviando.add(rid)

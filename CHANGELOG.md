@@ -5,6 +5,17 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Añadido
+- **Aviso de HTTP/2 en el repeater y el Intruder.** Un navegador copia la
+  petición como `HTTP/2.0`, pero ambos hablan HTTP/1.1 sobre socket crudo:
+  esa versión viaja tal cual y el servidor contesta 400 o algo raro. Ahora
+  se avisa al enviar (y al lanzar el ataque) para que ese 400 no parezca un
+  misterio. No se reescribe sola —«lo que escribes es lo que viaja», bajar
+  a HTTP/1.1 es decisión del analista— y el envío sigue adelante: la última
+  palabra es suya.
+
 ## [0.9.3] — 2026-11-01
 
 ### Corregido
