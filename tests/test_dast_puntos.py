@@ -133,9 +133,9 @@ def test_query_y_formulario_siguen_funcionando():
 # ------------------------------------------------- cabeceras y cookies
 def test_cookies_y_cabeceras_marcadas_son_puntos():
     crudo = ("GET / HTTP/1.1\r\nHost: o.com\r\n"
-             "User-Agent: curl\r\nCookie: sid=abc; theme=dark\r\n\r\n")
+             "User-Agent: curl\r\nCookie: idioma=es; theme=dark\r\n\r\n")
     marcas = {(p.donde, p.nombre) for p in puntos(crudo)}
-    assert ("cookie", "sid") in marcas
+    assert ("cookie", "idioma") in marcas
     assert ("cookie", "theme") in marcas
     assert ("cabecera", "User-Agent") in marcas
 
@@ -170,11 +170,11 @@ def test_sustituir_una_cabecera_deja_las_demas_igual():
 
 def test_sustituir_una_cookie_conserva_las_otras():
     crudo = ("GET / HTTP/1.1\r\nHost: o.com\r\n"
-             "Cookie: sid=abc; theme=dark\r\n\r\n")
-    p = next(x for x in puntos(crudo) if x.nombre == "sid")
+             "Cookie: idioma=es; theme=dark\r\n\r\n")
+    p = next(x for x in puntos(crudo) if x.nombre == "idioma")
     nuevo = con_payload(crudo, p, "PAYLOAD")
     linea = next(ln for ln in nuevo.splitlines() if ln.startswith("Cookie:"))
-    assert "sid=PAYLOAD" in linea and "theme=dark" in linea
+    assert "idioma=PAYLOAD" in linea and "theme=dark" in linea
 
 
 def test_payload_no_latin1_en_cookie_no_se_corrompe_en_silencio():
@@ -283,3 +283,38 @@ def test_un_multipart_sin_boundary_no_se_trocea():
     crudo = ("POST /x HTTP/1.1\r\nHost: o.com\r\n"
              "Content-Type: multipart/form-data\r\n\r\n--X\r\ncosas\r\n")
     assert [p for p in puntos(crudo) if p.donde == "multipart"] == []
+
+
+# ------------------------------------- cookies de sesion: no se fuzzean
+def test_las_cookies_de_sesion_no_son_puntos():
+    """Medido contra DVWA: fuzzear PHPSESSID y la cookie de configuracion
+    se llevaba UN TERCIO del trafico del barrido (36 de 108 peticiones) sin
+    poder encontrar nada, y encima la cookie `security` cambiaba el nivel
+    de dificultad a mitad del escaneo: se estaba probando algo distinto de
+    lo que el analista creia."""
+    crudo = ("GET /x?q=1 HTTP/1.1\r\nHost: o.com\r\n"
+             "Cookie: PHPSESSID=abc; JSESSIONID=d; csrftoken=e; sid=f\r\n\r\n")
+    assert [p for p in puntos(crudo) if p.donde == "cookie"] == []
+
+
+def test_una_cookie_de_aplicacion_si_es_punto():
+    """La exclusion es por nombre conocido, no «todas las cookies»: una
+    cookie de la aplicacion es superficie legitima."""
+    crudo = ("GET /x HTTP/1.1\r\nHost: o.com\r\n"
+             "Cookie: PHPSESSID=abc; idioma=es; carrito=7\r\n\r\n")
+    nombres = {p.nombre for p in puntos(crudo) if p.donde == "cookie"}
+    assert nombres == {"idioma", "carrito"}
+
+
+def test_la_exclusion_no_distingue_mayusculas():
+    crudo = "GET /x HTTP/1.1\r\nHost: o.com\r\nCookie: phpsessid=a; SID=b\r\n\r\n"
+    assert [p for p in puntos(crudo) if p.donde == "cookie"] == []
+
+
+def test_se_puede_sustituir_igual_si_alguien_pide_ese_punto():
+    """Excluirla de la deteccion no rompe `con_payload`: un plugin o una
+    prueba manual pueden construir ese punto a proposito."""
+    from luzxfer.core.tools.dast_puntos import Punto
+    crudo = "GET /x HTTP/1.1\r\nHost: o.com\r\nCookie: PHPSESSID=abc\r\n\r\n"
+    p = Punto(nombre="PHPSESSID", valor="abc", donde="cookie", indice=0)
+    assert "PHPSESSID=PAYLOAD" in con_payload(crudo, p, "PAYLOAD")
