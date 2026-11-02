@@ -350,3 +350,21 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   que yo supuse: no son los extras, es la **UX en pantalla de telefono**.
   Eso se piensa aparte; hasta entonces la rama sigue siendo solo un punto
   conocido-bueno.
+- **2026-11-02** — FASE B1 del DAST (framework de estrategias) probada
+  **contra OWASP Juice Shop real**, no contra mocks. Dos resultados que
+  valen mas que cualquier test unitario:
+  **Lo que funciona:** `/rest/products/search?q=` da la SQLi de verdad
+  (`sqlite_error`, payload `')`), con confianza alta y WSTG-INPV-05. Y los
+  puntos de ruta de A3 amplian la superficie de 1 punto a 4 en esa misma
+  peticion. Los puntos JSON de A1 detectan `email` y `password` en
+  `/rest/user/login`.
+  **El falso negativo medido, que es el hallazgo util:** ese mismo login
+  ES inyectable —`' OR 1=1--` devuelve 200 con un JWT donde lo normal es
+  401 de 26 bytes— y el escaneo devolvio CERO candidatos. Ninguna de las
+  cuatro familias de hoy puede verlo: no hay reflejo y no hay cadena de
+  error SQL en la respuesta. Lo unico que delata la inyeccion es que la
+  respuesta CAMBIA (401/26 bytes -> 200/784 bytes).
+  **Queda como criterio de aceptacion de B3 (boolean-blind):** si la
+  estrategia diferencial no caza este caso, no sirve. Es mejor que un test
+  inventado porque es una vulnerabilidad real, en un objetivo real, con un
+  oraculo conocido.

@@ -29,6 +29,12 @@ from dataclasses import dataclass, field
 from ..models import Finding
 from . import repeater
 from .alcance import Alcance
+from .dast_estrategias import (
+    Contexto,
+    EstrategiaPayloads,
+    Hallazgo,
+    Prueba,
+)
 from .dast_puntos import Punto, _partes, con_payload, puntos
 from .ritmo import Acelerador
 
@@ -37,22 +43,22 @@ from .ritmo import Acelerador
 MARCA = "lzx9q7z"
 
 
+# Lo que este modulo reexporta a proposito: un plugin importa `Prueba` y
+# `Punto` desde aqui desde la primera version, y mudarlos de archivo no
+# puede romper los plugins que ya existen.
+__all__ = [
+    "Contexto", "ESTRATEGIAS", "Escaneo", "EstrategiaPayloads",
+    "FueraDeAlcance", "Hallazgo", "PRUEBAS", "Prueba", "Punto",
+    "SinPuntos", "con_payload", "puntos",
+]
+
+
 class FueraDeAlcance(RuntimeError):
     """El objetivo no está autorizado por el alcance."""
 
 
 class SinPuntos(ValueError):
     """La petición no tiene parámetros donde inyectar."""
-
-
-@dataclass(slots=True)
-class Prueba:
-    nombre: str
-    titulo: str
-    payloads: list[str]
-    wstg: list[str]
-    # (cuerpo, estado, cabeceras_en_minuscula) -> motivo, o None
-    evalua: Callable[[str, int, dict], str | None]
 
 
 # --------------------------------------------------------------- pruebas
@@ -98,36 +104,44 @@ def _eval_traversal(cuerpo: str, estado: int, cab: dict) -> str | None:
 
 _PAYLOADS_REFLEJO = [f"<{MARCA}>", f'"{MARCA}"', f"'{MARCA}'"]
 
-PRUEBAS: dict[str, Prueba] = {
-    "reflejo": Prueba(
+ESTRATEGIAS: dict[str, EstrategiaPayloads] = {
+    "reflejo": EstrategiaPayloads(
         nombre="reflejo",
         titulo="entrada reflejada sin escapar",
         payloads=list(_PAYLOADS_REFLEJO),
         wstg=["WSTG-INPV-01", "WSTG-INPV-02"],
         evalua=_eval_reflejo,
+        severidad="high", confianza="media",
     ),
-    "sqli_error": Prueba(
+    "sqli_error": EstrategiaPayloads(
         nombre="sqli_error",
         titulo="error de SQL al romper la comilla",
         payloads=["'", '"', "')"],
         wstg=["WSTG-INPV-05"],
         evalua=_eval_sqli,
+        severidad="high", confianza="alta",
     ),
-    "redireccion": Prueba(
+    "redireccion": EstrategiaPayloads(
         nombre="redireccion",
         titulo="redireccion abierta",
         payloads=[f"https://{_HOST_SONDA}/", f"//{_HOST_SONDA}/"],
         wstg=["WSTG-CLNT-04"],
         evalua=_eval_redireccion,
+        severidad="medium", confianza="alta",
     ),
-    "traversal": Prueba(
+    "traversal": EstrategiaPayloads(
         nombre="traversal",
         titulo="traversal de ruta",
         payloads=["../../../../etc/passwd", "....//....//etc/passwd"],
         wstg=["WSTG-ATHZ-01"],
         evalua=_eval_traversal,
+        severidad="high", confianza="alta",
     ),
 }
+
+
+# El nombre de siempre, para lo que ya lo importaba.
+PRUEBAS = ESTRATEGIAS
 
 
 # --------------------------------------------------------------- escaneo
@@ -147,11 +161,16 @@ class Escaneo:
     timeout: float = 15.0
     # las que anaden los plugins, sumadas a las de serie
     pruebas_extra: list = field(default_factory=list)
+    # canal fuera de banda, si hay. None = las estrategias que lo pidan
+    # se omiten, y se anotan: una omision silenciosa seria un falso
+    # negativo disfrazado de "probado y limpio"
+    oob: object | None = None
 
     puntos: list[Punto] = field(default_factory=list, init=False)
     total: int = field(default=0, init=False)
     enviadas: int = field(default=0, init=False)
     terminado: bool = field(default=False, init=False)
+    omitidas: list = field(default_factory=list, init=False)
     _parar: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
@@ -173,12 +192,31 @@ class Escaneo:
                 "esta peticion no tiene parametros donde inyectar: ni query "
                 "ni cuerpo de formulario."
             )
+        self.omitidas = [e for e in self.todas_las_pruebas
+                         if not self._aplicable(e)]
+        # COTA de peticiones, no cuenta exacta: una estrategia para en
+        # cuanto encuentra. Es el numero que se le ensena al analista
+        # antes de disparar contra un sistema ajeno, asi que tiene que ser
+        # un techo de verdad —nunca quedarse corto—, y por eso suma todos
+        # los payloads aunque casi nunca se manden todos.
         self.total = len(self.puntos) * sum(
-            len(p.payloads) for p in self.todas_las_pruebas)
+            e.peticiones for e in self.aplicables)
 
     @property
     def todas_las_pruebas(self) -> list:
-        return list(PRUEBAS.values()) + list(self.pruebas_extra)
+        return list(ESTRATEGIAS.values()) + list(self.pruebas_extra)
+
+    @property
+    def capacidades(self) -> frozenset:
+        """Lo que este escaneo puede hacer. Hoy solo el canal OOB."""
+        return frozenset({"oob"}) if self.oob is not None else frozenset()
+
+    def _aplicable(self, estrategia) -> bool:
+        return getattr(estrategia, "requiere", frozenset()) <= self.capacidades
+
+    @property
+    def aplicables(self) -> list:
+        return [e for e in self.todas_las_pruebas if self._aplicable(e)]
 
     def abortar(self) -> None:
         self._parar = True
@@ -193,36 +231,45 @@ class Escaneo:
         hallazgos: list[Finding] = []
         base = _url_de(self.crudo).split("?")[0]
 
-        tareas = [(p, prueba, payload)
-                  for p in self.puntos
-                  for prueba in self.todas_las_pruebas
-                  for payload in prueba.payloads]
+        # la unidad de trabajo es (punto, estrategia): cuantas peticiones
+        # manda cada estrategia lo decide ella, que es justo lo que el
+        # modelo viejo no permitia
+        tareas = [(p, e) for p in self.puntos for e in self.aplicables]
+
+        def enviar_para(punto):
+            def enviar(payload: str):
+                acelerador.esperar()
+                flujo = repeater.send_raw(
+                    con_payload(self.crudo, punto, payload),
+                    tls=self.tls, timeout=self.timeout)
+                self.enviadas += 1
+                return flujo
+            return enviar
 
         def trabajo(tarea):
-            punto, prueba, payload = tarea
+            punto, estrategia = tarea
             if self._parar:
                 return None
-            acelerador.esperar()
-            if self._parar:
+            ctx = Contexto(self.crudo, punto, enviar_para(punto), oob=self.oob)
+            try:
+                hallazgo = estrategia.probar(ctx)
+            except Exception:
+                # una estrategia rota —sobre todo de un plugin— no puede
+                # llevarse por delante el resto del barrido
                 return None
-
-            flujo = repeater.send_raw(con_payload(self.crudo, punto, payload),
-                                      tls=self.tls, timeout=self.timeout)
-            self.enviadas += 1
-            if flujo.response is None:
-                return None
-            r = flujo.response
-            cab = {k.lower(): v for k, v in r.headers}
-            motivo = prueba.evalua(r.text(limite=400_000), r.status, cab)
-            if motivo is None:
+            if hallazgo is None or self._parar:
                 return None
             return Finding(
                 kind="DAST",
-                detail=f"{prueba.titulo} en '{punto.nombre}': {motivo}",
+                detail=f"{estrategia.titulo} en '{punto.nombre}': "
+                       f"{hallazgo.motivo}",
                 url=base,
-                wstg=list(prueba.wstg),
+                wstg=list(estrategia.wstg),
+                severity=getattr(estrategia, "severidad", ""),
                 extra={"param": punto.nombre, "donde": punto.donde,
-                       "prueba": prueba.nombre, "payload": payload},
+                       "prueba": estrategia.nombre,
+                       "payload": hallazgo.payload,
+                       "confianza": hallazgo.confianza},
             )
 
         try:
