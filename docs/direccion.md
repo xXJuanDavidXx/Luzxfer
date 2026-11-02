@@ -325,3 +325,14 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   sostengo que contradice la decision 3 de este documento, la que aplazo la
   IA por sacar datos del cliente de su perimetro), y si la FASE F
   (nuclei/nikto) se corta.
+- **2026-11-02** — Resueltas las dos decisiones abiertas del DAST 10/10.
+  **OOB sin servidor por defecto:** activarlo es opt-in y ademas exige
+  configurar servidor. El spec proponia el publico de projectdiscovery por
+  defecto; eso es el mismo acto que la decision 3 prohibio al aplazar la IA
+  —sacar datos del cliente de su perimetro—, solo que por DNS en vez de por
+  HTTP. Aplicar dos varas al mismo riesgo seria incoherente.
+  **FASE F (nuclei/nikto) aplazada sin fecha:** la identidad de la
+  herramienta es correr donde Burp no corre; colgarle binarios externos
+  pesados no acerca eso, y su cobertura ya quedaba fuera del Youden por
+  honestidad. La interfaz `HerramientaExterna` queda disenada por si se
+  retoma.
