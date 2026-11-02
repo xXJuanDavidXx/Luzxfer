@@ -41,11 +41,20 @@ def test_sin_parametros_no_hay_donde_inyectar():
     assert dast.puntos("GET / HTTP/1.1\r\nHost: o.com\r\n\r\n") == []
 
 
-def test_un_cuerpo_json_no_se_trocea_como_formulario():
-    """Todavia no se sabe inyectar en JSON. Fingir que si, partiendolo
-    como si fuera un formulario, mandaria basura al servidor."""
+def test_un_cuerpo_json_se_parsea_de_verdad_no_como_formulario():
+    """Antes se rechazaba entero, porque trocearlo como un formulario
+    mandaria basura. Ahora se parsea: una hoja por punto, con su ruta.
+    Lo que no cambia es la regla de fondo —ver el test de abajo—."""
     crudo = ('POST /api HTTP/1.1\r\nHost: o.com\r\n'
              'Content-Type: application/json\r\n\r\n{"a":1,"b":2}')
+    assert [(p.donde, p.ruta_json) for p in dast.puntos(crudo)] == [
+        ("json", "a"), ("json", "b")]
+
+
+def test_un_cuerpo_de_tipo_desconocido_sigue_sin_trocearse():
+    """La regla que no cambia: lo que no se entiende no se parte a ciegas."""
+    crudo = ('POST /api HTTP/1.1\r\nHost: o.com\r\n'
+             'Content-Type: application/octet-stream\r\n\r\n{"a":1,"b":2}')
     assert dast.puntos(crudo) == []
 
 
