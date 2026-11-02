@@ -5,6 +5,22 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [0.9.1] — 2026-11-01
+
+### Corregido
+- **Interceptar una petición con cuerpo binario y soltarla la corrompía.**
+  El cuerpo se mostraba como texto con `decode(..., "replace")`, así que los
+  bytes que no son UTF-8 se volvían U+FFFD y, al reenviar, salían como
+  `EF BF BD`. Una subida de imagen o un zip que solo pasaba de largo llegaba
+  hecho basura, en silencio. Arreglado en dos capas que se refuerzan:
+  - en el núcleo (`_descomponer`), si el cuerpo editado coincide con el
+    original pasado por la misma decodificación con pérdida, es que no se
+    tocó y salen los bytes de verdad;
+  - en la pantalla de interceptación, soltar sin editar manda la petición
+    original byte a byte; si se editó un cuerpo que era binario, se avisa de
+    que editarlo lo corrompe; y un cuerpo de texto con `\n` no se convierte
+    a `\r\n` por el estilo de saltos del editor.
+
 ## [0.9.0] — 2026-11-01
 
 ### Añadido
