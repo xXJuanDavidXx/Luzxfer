@@ -578,3 +578,156 @@ async def test_avisa_si_la_linea_de_peticion_lleva_espacios():
         await pilot.press("ctrl+f")
         h.join(timeout=3)
         assert caja["r"] is not None
+
+
+# ------------------------------------- _componer / _descomponer (cuerpo)
+from luzxfer.core.engine.builtin import _componer, _descomponer  # noqa: E402
+
+
+def _ida_y_vuelta(metodo, cuerpo, *, editar=None):
+    """Compone la peticion, opcionalmente la edita, y la vuelve a leer."""
+    cab = [("Host", "o.com")]
+    texto = _componer(metodo, "/x", "HTTP/1.1", cab, cuerpo)
+    if editar is not None:
+        texto = editar(texto)
+    return _descomponer(texto, metodo, "/x", cab, cuerpo)
+
+
+def test_un_cuerpo_binario_sin_editar_sale_intacto():
+    """El bug: una subida binaria interceptada y reenviada sin tocar se
+    corrompia al decodificarla como texto con 'replace'."""
+    original = bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0xff, 0xd8, 0x00,
+                      0x01, 0x80, 0x81])
+    _m, _r, cab, cue = _ida_y_vuelta("POST", original)
+    assert cue == original, "los bytes binarios tienen que viajar intactos"
+    assert dict(cab)["Content-Length"] == str(len(original))
+
+
+def test_un_cuerpo_de_texto_sin_editar_sale_igual():
+    _m, _r, _c, cue = _ida_y_vuelta("POST", b"usuario=admin&clave=1234")
+    assert cue == b"usuario=admin&clave=1234"
+
+
+def test_editar_el_cuerpo_de_texto_se_respeta():
+    def editar(t):
+        return t.replace("original", "EDITADO")
+    _m, _r, cab, cue = _ida_y_vuelta("POST", b"cuerpo original", editar=editar)
+    assert cue == b"cuerpo EDITADO"
+    assert dict(cab)["Content-Length"] == str(len(b"cuerpo EDITADO"))
+
+
+def test_un_multipart_interceptado_conserva_sus_crlf():
+    cuerpo = (b'--X\r\nContent-Disposition: form-data; name="f"\r\n'
+              b"\r\ndato\r\n--X--\r\n")
+    _m, _r, _c, cue = _ida_y_vuelta("POST", cuerpo)
+    assert cue == cuerpo, "los \\r\\n del multipart no se tocan"
+
+
+def test_una_peticion_ilegible_devuelve_la_original():
+    """Ante la duda sale lo que habia: no tragarse el trafico por un
+    dedazo editando."""
+    cab = [("Host", "o.com")]
+    # una sola palabra en la primera linea no es una peticion valida
+    m, r, c, cue = _descomponer("basura", "GET", "/x", cab, b"")
+    assert (m, r) == ("GET", "/x")
+
+
+# --------------------------- ida y vuelta por el TextArea de verdad (QA)
+# Los tests de arriba llaman a _componer/_descomponer directamente y no
+# pasan por el editor. El TextArea de Textual parte el texto con
+# splitlines() y lo vuelve a unir con UN solo estilo de salto: un \n
+# suelto pasa a \r\n, y \x0b \x0c \x1c... cuentan como saltos. Eso
+# corrompia los PNG (su firma lleva un \n suelto) aunque nadie tocara
+# nada. Estos tests recorren la ruta real: pantalla → ctrl+f → motor.
+PNG_FIRMA = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+CAB_QA = [("Host", "o.com"), ("Content-Type", "x/y")]
+
+
+async def _por_la_pantalla(cuerpo, *, editar=None, ctrl_f=1):
+    """Detiene la peticion, la (no) edita en la pantalla y la suelta.
+
+    Devuelve lo que saldria hacia el servidor: (metodo, ruta, cab, cuerpo).
+    """
+    from textual.widgets import TextArea
+
+    from luzxfer.tui.app import LuzxferApp
+    from luzxfer.tui.screens.intercepta import InterceptaScreen
+
+    crudo = _componer("POST", "/x", "HTTP/1.1", CAB_QA, cuerpo)
+    app = LuzxferApp(arrancar_motor=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.press("x")
+        await pilot.pause()
+        caja, h = _en_hilo(lambda: app.interceptor.detener(crudo))
+        for _ in range(100):
+            await pilot.pause(0.02)
+            if isinstance(app.screen, InterceptaScreen):
+                break
+        await pilot.pause()
+        if editar is not None:
+            ed = app.screen.query_one("#int-crudo", TextArea)
+            ed.text = editar(ed.text)
+            await pilot.pause()
+        for _ in range(ctrl_f):
+            await pilot.press("ctrl+f")
+            await pilot.pause()
+        h.join(timeout=3)
+        aviso = None
+        if "r" not in caja:
+            from textual.widgets import Static
+            aviso = app.screen.query_one("#itc-ayuda", Static).render().plain
+            await pilot.press("ctrl+f")
+            h.join(timeout=3)
+    final = caja["r"]
+    salida = _descomponer(final, "POST", "/x", CAB_QA, cuerpo)
+    return salida, aviso
+
+
+async def test_pantalla_png_sin_editar_sale_intacto():
+    cuerpo = PNG_FIRMA + b"\x00\x00\x00\rIHDR\xff\xd8\x0b\x0c\x1c\x1d\x1e"
+    (_m, _r, cab, cue), _ = await _por_la_pantalla(cuerpo)
+    assert cue == cuerpo
+    assert dict(cab)["Content-Length"] == str(len(cuerpo))
+
+
+async def test_pantalla_json_lf_sin_editar_sale_igual():
+    cuerpo = b'{\n  "a": 1\n}\n'
+    (_m, _r, _c, cue), _ = await _por_la_pantalla(cuerpo)
+    assert cue == cuerpo
+
+
+async def test_pantalla_multipart_crlf_sin_editar_sale_igual():
+    cuerpo = (b'--X\r\nContent-Disposition: form-data; name="f"\r\n'
+              b"\r\ndato\r\n--X--\r\n")
+    (_m, _r, _c, cue), _ = await _por_la_pantalla(cuerpo)
+    assert cue == cuerpo
+
+
+async def test_pantalla_editar_solo_cabeceras_no_toca_un_png():
+    """Cambiar una cabecera no es editar el cuerpo: el binario viaja igual."""
+    cuerpo = PNG_FIRMA + b"\x00\x00\x00\rIHDR\xff"
+
+    def editar(t):
+        return t.replace("Content-Type: x/y", "Content-Type: image/png")
+    (_m, _r, cab, cue), aviso = await _por_la_pantalla(cuerpo, editar=editar)
+    assert dict(cab)["Content-Type"] == "image/png"
+    assert cue == cuerpo
+    assert aviso is None, "no hay nada que avisar si el cuerpo no se toco"
+
+
+async def test_pantalla_editar_un_json_lf_conserva_sus_saltos():
+    """El cuerpo editado lleva el salto del original, no el del editor."""
+    cuerpo = b'{\n  "a": 1\n}\n'
+    (_m, _r, cab, cue), _ = await _por_la_pantalla(
+        cuerpo, editar=lambda t: t.replace('"a": 1', '"a": 2'))
+    assert cue == b'{\n  "a": 2\n}\n'
+    assert dict(cab)["Content-Length"] == str(len(cue))
+
+
+async def test_pantalla_editar_un_binario_avisa_antes_de_corromperlo():
+    cuerpo = b"abc\xff\xfedef"
+    (_m, _r, _c, cue), aviso = await _por_la_pantalla(
+        cuerpo, editar=lambda t: t.replace("abc", "ABC"))
+    assert aviso is not None and "binario" in aviso.lower()
+    # insistiendo sale lo editado: la ultima palabra es del analista
+    assert cue.startswith(b"ABC")
