@@ -69,6 +69,19 @@ def porcentaje(estados: dict[str, str]) -> float:
 
 
 # --------------------------------------------------------------- informe
+def _celda(texto: str) -> str:
+    """Un valor a salvo de romper una tabla o una linea Markdown.
+
+    El detalle y la url de un hallazgo vienen de lo que dijo el servidor o
+    de un plugin: pueden traer un '|' —valido en una query— o un salto de
+    linea de contenido reflejado. Sin escaparlos, la fila gana una columna
+    o se parte en dos, y el informe que abre el cliente sale roto justo
+    donde tenia que verse serio.
+    """
+    return str(texto).replace("\\", "\\\\").replace("|", "\\|").replace(
+        "\n", " ").replace("\r", " ")
+
+
 _ETIQUETA = {
     wstg.NO_PROBADO: "no probado",
     wstg.PROBADO: "con candidatos",
@@ -132,9 +145,9 @@ def informe(
     if confirmados:
         for h in confirmados:
             ids = ", ".join(h.wstg) if h.wstg else "sin prueba WSTG asociada"
-            p += [f"### {h.kind} — {h.detail}", "",
+            p += [f"### {_celda(h.kind)} — {_celda(h.detail)}", "",
                   f"- **WSTG:** {ids}",
-                  f"- **Dónde:** {h.url}"]
+                  f"- **Dónde:** {_celda(h.url)}"]
             if h.severity:
                 p.append(f"- **Severidad:** {h.severity}")
             if h.flow_ids:
@@ -164,8 +177,8 @@ def informe(
               "| tipo | detalle | dónde | WSTG |", "| --- | --- | --- | --- |"]
         for h in candidatos:
             ids = ", ".join(h.wstg) if h.wstg else "—"
-            detalle = h.detail.replace("|", "\\|")
-            p.append(f"| {h.kind} | {detalle} | {h.url} | {ids} |")
+            p.append(f"| {_celda(h.kind)} | {_celda(h.detail)} | "
+                     f"{_celda(h.url)} | {ids} |")
         p.append("")
 
     p += ["---", "",

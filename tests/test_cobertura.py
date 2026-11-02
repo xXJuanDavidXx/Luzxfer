@@ -299,3 +299,43 @@ async def test_ctrl_g_escribe_el_informe_y_dice_donde(tmp_path, monkeypatch):
         texto = ruta.read_text()
         assert "cliente-x" in texto and "+objetivo.com" in texto
         assert "WSTG-INPV-01" in texto
+
+
+# ------------------------------------------ integridad de las tablas del informe
+def _fila_candidato(md: str, marca: str) -> str:
+    """La fila de la tabla de candidatos que contiene `marca`."""
+    return next(ln for ln in md.splitlines()
+               if ln.startswith("| ") and marca in ln)
+
+
+def test_un_url_con_pipe_no_rompe_la_tabla_de_candidatos():
+    """El informe va a un cliente: una URL con '|' (valida en una query)
+    partia la fila en una columna de mas, y el cliente lo abre roto."""
+    h = Finding(kind="REFLEJO", detail="reflejo de q",
+                url="http://o.com/x?a=1|2|3", wstg=["WSTG-INPV-01"])
+    md = _informe(hallazgos=[h])
+    fila = _fila_candidato(md, "REFLEJO")
+    # una fila de 4 columnas son exactamente 5 barras SIN escapar
+    assert fila.count("|") - fila.count("\\|") == 5, \
+        f"la fila tiene columnas de mas: {fila!r}"
+    assert "o.com" in fila
+
+
+def test_un_salto_de_linea_en_el_detalle_no_parte_la_fila():
+    """Contenido reflejado o un plugin pueden meter un \\n; sin escaparlo,
+    la fila se parte en dos y la segunda mitad es basura."""
+    h = Finding(kind="FUGA", detail="linea uno\nlinea dos",
+                url="http://o.com/x", wstg=["WSTG-INFO-02"])
+    md = _informe(hallazgos=[h])
+    fila = _fila_candidato(md, "FUGA")
+    assert "linea uno" in fila and "linea dos" in fila, \
+        "las dos partes tienen que seguir en la misma fila"
+    assert "\n" not in fila
+
+
+def test_un_salto_de_linea_en_la_url_no_rompe_el_hallazgo_confirmado():
+    h = Finding(kind="DAST", detail="sqli", url="http://o.com/x\nInjected",
+                wstg=["WSTG-INPV-05"], confirmed=True)
+    md = _informe(hallazgos=[h])
+    linea = next(ln for ln in md.splitlines() if "Dónde" in ln)
+    assert "Injected" in linea, "la url no puede derramarse a otra linea"
