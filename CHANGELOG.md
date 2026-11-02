@@ -5,6 +5,20 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Añadido
+- **Soporte de `zstd`**, la codificación que ya piden los navegadores
+  (`Accept-Encoding: ... zstd`) y que sirven cada vez más servidores. Entró
+  en la stdlib de Python en 3.14, así que se descomprime **sin compilar
+  nada** —encaja en la regla de cero dependencias nativas, a diferencia de
+  brotli—. Sin esto, contra un servidor que respondiera zstd el detector
+  buscaba reflejos en bytes comprimidos y no veía nada: el mismo falso
+  negativo silencioso que ya costó el brotli. Ahora el proxy conserva `zstd`
+  en el `Accept-Encoding` (porque sabe leerlo) y los cuerpos zstd se
+  descomprimen para mostrarlos y analizarlos. En Python anterior a 3.14 se
+  degrada solo: se recorta como cualquier codificación ilegible.
+
 ## [0.10.0] — 2026-11-01
 
 ### Añadido

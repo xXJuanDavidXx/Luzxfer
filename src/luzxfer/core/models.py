@@ -36,12 +36,23 @@ except ImportError:
     except ImportError:
         _brotli = None                  # type: ignore[assignment]
 
+try:
+    # zstd entro en la stdlib en Python 3.14, sin compilar nada: encaja en
+    # la regla de cero dependencias nativas. Los navegadores ya lo piden
+    # (Accept-Encoding: ... zstd), asi que sin esto el detector se queda
+    # ciego ante un servidor que lo use, igual que pasaba con brotli.
+    from compression import zstd as _zstd
+except ImportError:
+    _zstd = None                        # type: ignore[assignment]
+
 # Lo que luzxfer sabe deshacer, y la UNICA fuente de verdad sobre eso: el
 # motor la usa para recortar el Accept-Encoding que manda al servidor, y la
 # interfaz para avisar cuando un cuerpo quedo sin decodificar. Dos listas
 # que se separen con el tiempo serian un cuerpo ilegible sin aviso.
 CODIFICACIONES_LEGIBLES = frozenset(
-    {"gzip", "x-gzip", "deflate", "identity"} | ({"br"} if _brotli else set())
+    {"gzip", "x-gzip", "deflate", "identity"}
+    | ({"br"} if _brotli else set())
+    | ({"zstd"} if _zstd else set())
 )
 
 
@@ -181,6 +192,8 @@ class Response:
                     return zlib.decompress(self.body, -zlib.MAX_WBITS)
             if enc == "br" and _brotli is not None:
                 return _brotli.decompress(self.body)
+            if enc == "zstd" and _zstd is not None:
+                return _zstd.decompress(self.body)
         except Exception:
             # Amplio a proposito: esto procesa bytes de un servidor hostil, y
             # cada descompresor lanza lo suyo. Un cuerpo corrupto se muestra

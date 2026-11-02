@@ -625,6 +625,14 @@ reemplazarlo, conservando el orden y los valores `q=` que mandó el cliente.
 Sin esto el detector se queda ciego en silencio: busca en bytes comprimidos,
 no encuentra nada, y no reporta nada — un falso negativo que no deja rastro.
 
+`zstd` —la codificación nueva que ya piden los navegadores— se descomprime
+sin instalar nada en **Python 3.14 o posterior**, porque ahí entró en la
+librería estándar; encaja en la regla de cero dependencias nativas, al
+contrario que brotli. En Python anterior se trata como cualquier cosa
+ilegible: se recorta. El proxy conserva en el `Accept-Encoding` exactamente
+lo que sabe deshacer en tu instalación —ni más ni menos—, porque esa lista
+es una sola fuente de verdad compartida con el decodificador.
+
 `--conservar-encoding` apaga el recorte, para cuando lo que pruebas es cómo
 responde el servidor a cada codificación. `pip install '.[br]'` decodifica
 brotli de verdad. Y si aun así llega un cuerpo en algo ilegible, el panel de

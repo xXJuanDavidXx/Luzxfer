@@ -42,6 +42,37 @@ def test_cuerpo_corrupto_con_gzip_no_revienta():
     assert r.text() == "no es gzip"
 
 
+@pytest.mark.skipif("zstd" not in CODIFICACIONES_LEGIBLES,
+                    reason="esta version de Python no trae zstd en la stdlib")
+def test_el_detector_ve_a_traves_de_zstd():
+    """Los navegadores ya piden zstd; Python 3.14 lo trae en la stdlib, asi
+    que se descomprime sin compilar nada. Sin esto el detector buscaba
+    reflejos en bytes zstd y no veia nada, igual que pasaba con brotli."""
+    from compression import zstd
+    # HTML realista: relleno repetitivo para que zstd de verdad comprima y
+    # el marcador no quede literal en los bytes (en una cadena diminuta si
+    # quedaria, y entonces el detector lo "veria" por el motivo equivocado)
+    relleno = "<p>relleno repetido para que comprima de verdad</p>\n" * 200
+    html = f'<html>{relleno}buscaste: REFLEJOZSTD</html>'.encode()
+    r = Response(status=200,
+                 headers=[("Content-Type", "text/html"),
+                          ("Content-Encoding", "zstd")],
+                 body=zstd.compress(html))
+    assert b"REFLEJOZSTD" not in r.body          # crudo: comprimido
+    assert "REFLEJOZSTD" in r.text()             # texto: descomprimido
+    assert not r.sin_decodificar()
+    f = Flow(request=Request(method="GET", url="http://o.com/x?q=REFLEJOZSTD",
+                             headers=[("Host", "o.com")]),
+             response=r)
+    assert any(x.kind == "REFLEJO" for x in detector.analizar(f))
+
+
+def test_un_cuerpo_zstd_corrupto_no_revienta():
+    r = Response(status=200, headers=[("Content-Encoding", "zstd")],
+                 body=b"no es zstd")
+    assert r.text() == "no es zstd"             # sale tal cual, sin tumbar nada
+
+
 # ------------------------------------------- 2. lo que escribes es lo que viaja
 def test_repeater_conserva_cabeceras_duplicadas(eco):
     """Antes: dict(cabeceras) colapsaba duplicados. Mandar la misma cabecera
@@ -358,6 +389,10 @@ def _ae_que_vio_el_servidor(datos: dict) -> str:
 
 
 SIN_BROTLI = "br" not in CODIFICACIONES_LEGIBLES
+SIN_ZSTD = "zstd" not in CODIFICACIONES_LEGIBLES
+# una codificacion que no se sabe deshacer en ningun caso: 'compress' (LZW)
+# es HTTP valida pero luzxfer no la soporta, y no depende de que extras haya
+ILEGIBLE_SIEMPRE = "compress"
 
 
 def test_el_proxy_no_pide_al_servidor_lo_que_no_sabe_deshacer(eco):
@@ -366,15 +401,17 @@ def test_el_proxy_no_pide_al_servidor_lo_que_no_sabe_deshacer(eco):
     Falso negativo silencioso, y con brotli por defecto en nginx, Cloudflare
     y Express, es el caso comun y no el raro."""
     datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
-                            b"Accept-Encoding: gzip, deflate, br, zstd\r\n"
+                            b"Accept-Encoding: gzip, deflate, br, zstd, compress\r\n"
                             b"Connection: close\r\n\r\n")
     ae = _ae_que_vio_el_servidor(datos)
-    assert "zstd" not in ae, "eso no se sabe deshacer en ningun caso"
+    assert "compress" not in ae, "eso no se sabe deshacer en ningun caso"
     assert "gzip" in ae and "deflate" in ae
-    # con el extra [br] instalado SI se sabe deshacer brotli, asi que
-    # recortarlo seria empobrecer la respuesta sin motivo. Lo que se
-    # recorta es lo que no se puede leer, no una lista fija.
+    # lo que se recorta es lo que no se puede leer, no una lista fija: con
+    # el extra [br] se conserva brotli, y zstd se conserva en Python 3.14+
+    # porque entro en la stdlib. Dos listas (lo legible y lo que se pide)
+    # que se separen serian un cuerpo ilegible sin aviso.
     assert ("br" not in ae) == SIN_BROTLI
+    assert ("zstd" not in ae) == SIN_ZSTD
 
 
 def test_el_proxy_conserva_el_orden_y_los_q_de_accept_encoding(eco):
@@ -390,9 +427,8 @@ def test_el_proxy_conserva_el_orden_y_los_q_de_accept_encoding(eco):
 
 
 def test_si_el_cliente_solo_pide_lo_ilegible_se_manda_identity(eco):
-    ilegible = b"zstd" if not SIN_BROTLI else b"br"
     datos = _por_proxy(eco, b"GET /eco HTTP/1.1\r\nHost: x\r\n"
-                            b"Accept-Encoding: " + ilegible +
+                            b"Accept-Encoding: " + ILEGIBLE_SIEMPRE.encode() +
                             b"\r\nConnection: close\r\n\r\n")
     assert _ae_que_vio_el_servidor(datos) == "identity"
 
@@ -572,15 +608,15 @@ async def test_la_app_arranca_el_motor_con_sus_banderas(eco):
             _pedir_por, puerto,
             b'If-None-Match: W/"abc"\r\n'
             b"If-Modified-Since: Sat, 31 Oct 2026 21:45:30 GMT\r\n"
-            b"Accept-Encoding: gzip, deflate, br, zstd\r\n",
+            b"Accept-Encoding: gzip, deflate, " + ILEGIBLE_SIEMPRE.encode() + b"\r\n",
         )
 
     vistas = {k.lower(): v for k, v in datos["cabeceras"]}
     assert "if-none-match" not in vistas, "la app no le paso filtrar_cache al motor"
     assert "if-modified-since" not in vistas
-    # zstd no se sabe deshacer con extra ni sin el, asi que su ausencia
-    # prueba el cableado sin depender de que este instalado brotli
-    assert "zstd" not in vistas.get("accept-encoding", ""), \
+    # 'compress' no se sabe deshacer con extra ni sin el, asi que su ausencia
+    # prueba el cableado sin depender de que esten instalados brotli o zstd
+    assert ILEGIBLE_SIEMPRE not in vistas.get("accept-encoding", ""), \
         "la app no le paso filtrar_encoding al motor"
 
 
