@@ -5,7 +5,7 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
-## [Sin publicar]
+## [0.11.1] — 2026-11-01
 
 ### Corregido
 - **El informe WSTG podía salir con tablas rotas si un hallazgo traía un
