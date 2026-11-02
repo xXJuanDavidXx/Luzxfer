@@ -326,13 +326,26 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   IA por sacar datos del cliente de su perimetro), y si la FASE F
   (nuclei/nikto) se corta.
 - **2026-11-02** — Resueltas las dos decisiones abiertas del DAST 10/10.
-  **OOB sin servidor por defecto:** activarlo es opt-in y ademas exige
-  configurar servidor. El spec proponia el publico de projectdiscovery por
-  defecto; eso es el mismo acto que la decision 3 prohibio al aplazar la IA
-  —sacar datos del cliente de su perimetro—, solo que por DNS en vez de por
-  HTTP. Aplicar dos varas al mismo riesgo seria incoherente.
-  **FASE F (nuclei/nikto) aplazada sin fecha:** la identidad de la
-  herramienta es correr donde Burp no corre; colgarle binarios externos
-  pesados no acerca eso, y su cobertura ya quedaba fuera del Youden por
-  honestidad. La interfaz `HerramientaExterna` queda disenada por si se
-  retoma.
+  Yo habia propuesto exigir self-host para el OOB; **el operador lo corrigio
+  y tiene razon**: exigir montar un servidor excluye a quien no tiene tiempo
+  ni dinero, y convierte una capacidad en un privilegio. Las **dos opciones
+  existen** y elige el analista al activar: publico (bug bounty, labs,
+  pentest con riesgo aceptado) o self-host (contrato que prohibe salir del
+  perimetro).
+  **Lo que si se conserva de la objecion:** el riesgo real de la decision 3
+  no era que existiera la opcion, era que se activara *por descuido*. Asi
+  que activar OOB es deliberado, el canal se elige explicitamente, y mientras
+  este activo se ve en pantalla contra que servidor se trabaja. Esa
+  visibilidad es la diferencia entre «lo decidio el analista» y «se activo
+  solo».
+  **FASE F cortada como estaba escrita:** nuclei y nikto eran ejemplos, y
+  atar el diseno a dos binarios concretos era el error. El caso de uso
+  —aprovechar herramientas que el analista ya tenga— se replantea desde cero
+  y por la **API de plugins que ya existe**, no como fase del nucleo: un
+  plugin que envuelve una herramienta es justo para lo que esa API se hizo,
+  se instala solo si se quiere y su cobertura queda fuera del Youden por
+  construccion.
+  **La rama `termux` si tiene motivo para divergir algun dia**, y no es el
+  que yo supuse: no son los extras, es la **UX en pantalla de telefono**.
+  Eso se piensa aparte; hasta entonces la rama sigue siendo solo un punto
+  conocido-bueno.
