@@ -302,3 +302,10 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   comportamiento en un motor casi seguro esta en el otro. Arreglado igual y
   con tests que fallan si se revierte. La leccion: cuando se arregla algo en
   un motor, hay que ir a mirar el otro en el acto.
+- **2026-11-01** — El usuario uso el repeater contra un lab https de
+  PortSwigger y choco con `SSL: WRONG_VERSION_NUMBER`. Causa: el puerto por
+  defecto (80) se decidia antes que el TLS, asi que un Host sin puerto en una
+  pestaña https hacia TLS contra el 80. Invertido: el TLS manda sobre el
+  puerto. La leccion repetida —el valor de verdad sale de usar la
+  herramienta contra un objetivo real; esto no lo cazo ningun test porque
+  todos los tests traian el puerto en el Host.

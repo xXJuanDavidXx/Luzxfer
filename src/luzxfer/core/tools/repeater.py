@@ -76,6 +76,47 @@ def destino_de(cabeceras: list[tuple[str, str]]) -> tuple[str, int] | None:
     return None
 
 
+def _destino_y_puerto(host, port, cabeceras):
+    """(host, puerto_explicito | None) a partir del parametro o del Host.
+
+    A diferencia de `destino_de`, distingue «sin puerto» (None) de «puerto
+    80»: esa diferencia es la que deja que el puerto por defecto lo decida
+    el TLS en vez de quedar clavado en 80.
+    """
+    if host:
+        return host, port
+    for k, v in cabeceras:
+        if k.lower() == "host":
+            v = v.strip()
+            if ":" in v:
+                hh, _, pp = v.partition(":")
+                try:
+                    return hh, int(pp)
+                except ValueError:
+                    return hh, None
+            return v, port          # el Host no trae puerto: lo decide el TLS
+    return None, port
+
+
+def resolver_destino(host, port, tls, cabeceras):
+    """(host, puerto, usar_tls) de donde va a ir de verdad la peticion.
+
+    El TLS manda sobre el puerto por defecto, no al reves. Un lab https cuyo
+    Host no trae puerto debe salir al 443 con TLS; antes salia al 80 con TLS
+    y reventaba con WRONG_VERSION_NUMBER. Con puerto explicito, ese puerto se
+    respeta; sin puerto ni pista de TLS, http llano al 80.
+    """
+    h, puerto_exp = _destino_y_puerto(host, port, cabeceras)
+    if tls is not None:
+        usar_tls = tls
+    elif puerto_exp is not None:
+        usar_tls = (puerto_exp == 443)
+    else:
+        usar_tls = False
+    p = puerto_exp if puerto_exp is not None else (443 if usar_tls else 80)
+    return h, p, usar_tls
+
+
 def build_raw(
     metodo: str, ruta: str, version: str,
     cabeceras: list[tuple[str, str]], cuerpo: bytes,
@@ -164,14 +205,12 @@ def _una_vez(
     """Un solo envio, sin seguir nada."""
     metodo, ruta, version, cabeceras, cuerpo = parse_raw(texto)
 
-    objetivo = (host, port) if host else destino_de(cabeceras)
-    if not objetivo or not objetivo[0]:
+    h, p, usar_tls = resolver_destino(host, port, tls, cabeceras)
+    if not h:
         raise ErrorPeticion(
             "no hay cabecera Host y no se indico destino. "
             "Agrega 'Host: servidor:puerto' o pasa el destino aparte."
         )
-    h, p = objetivo[0], (port or objetivo[1] or 80)
-    usar_tls = (p == 443) if tls is None else tls
 
     enviar = list(cabeceras)
     if recalcular_cl:
