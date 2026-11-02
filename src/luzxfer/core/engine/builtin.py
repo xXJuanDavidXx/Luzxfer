@@ -111,16 +111,20 @@ class _Handler(BaseHTTPRequestHandler):
         metodo = self.command
         inter = self.engine.interceptor
         if inter is not None and inter.activa:
-            final = inter.detener(_componer(metodo, ruta,
-                                            self.request_version, salida, cuerpo))
+            mostrada = _componer(metodo, ruta, self.request_version,
+                                 salida, cuerpo)
+            final = inter.detener(mostrada)
             if final is None:
                 # descartada: se corta la conexion sin contestar, que es
                 # lo que «descartar» significa. Inventar una respuesta
                 # falsearia lo que el cliente cree que paso.
                 self.close_connection = True
                 return
-            metodo, ruta, salida, cuerpo = _descomponer(
-                final, metodo, ruta, salida, cuerpo)
+            if final != mostrada:
+                # sin tocar no se recompone nada: el texto es una vista
+                # con perdida de los bytes (un binario no cabe en str)
+                metodo, ruta, salida, cuerpo = _descomponer(
+                    final, metodo, ruta, salida, cuerpo)
             # la URL del Flow tiene que seguir a la ruta editada. Sin
             # esto el historial guardaba la peticion ORIGINAL aunque
             # saliera otra: en un pentest eso no es un detalle de
@@ -302,6 +306,14 @@ def _descomponer(texto: str, metodo: str, ruta: str,
     El Content-Length se recalcula, por la misma razon que en el
     repeater: editar el cuerpo a mano y olvidarlo deja al servidor
     esperando bytes que no van a llegar.
+
+    Un cuerpo binario —una subida de imagen, un zip— no se puede enseñar
+    como texto sin perderlo: `_componer` lo decodifica con 'replace' y los
+    bytes que no son UTF-8 se vuelven U+FFFD. Si el analista NO lo edita,
+    hay que devolver los bytes originales tal cual; re-codificar ese texto
+    con relleno convertiria una subida que solo pasaba de largo en basura,
+    en silencio, justo en la ruta que presume de «lo que escribes es lo
+    que viaja».
     """
     from ..tools.repeater import ErrorPeticion, parse_raw
 
@@ -309,6 +321,12 @@ def _descomponer(texto: str, metodo: str, ruta: str,
         m, r, _v, cab, cue = parse_raw(texto)
     except ErrorPeticion:
         return metodo, ruta, cabeceras, cuerpo
+
+    # si el cuerpo mostrado coincide con el original pasado por la misma
+    # decodificacion con perdida, es que no se toco: salen los bytes de
+    # verdad, no su sombra en UTF-8
+    if cue == cuerpo.decode("utf-8", "replace").encode("utf-8"):
+        cue = cuerpo
 
     cab = [(k, v) for k, v in cab if k.lower() != "content-length"]
     if cue or m in ("POST", "PUT", "PATCH"):

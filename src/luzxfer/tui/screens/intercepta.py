@@ -26,6 +26,19 @@ VACIO = ("Esperando. La interceptacion esta encendida, asi que el navegador\n"
          "ctrl+x la apaga y deja pasar todo.")
 
 
+def _partir(texto: str) -> tuple[str, str, str]:
+    """(cabeza, separador, cuerpo), cortando por la primera linea en
+    blanco igual que `repeater.parse_raw`."""
+    corte, sep = -1, ""
+    for s in ("\r\n\r\n", "\n\n"):
+        i = texto.find(s)
+        if i != -1 and (corte == -1 or i < corte):
+            corte, sep = i, s
+    if corte == -1:
+        return texto, "", ""
+    return texto[:corte], sep, texto[corte + len(sep):]
+
+
 class InterceptaScreen(ModalScreen):
     # priority=True porque el TextArea reclama ctrl+d, ctrl+f y ctrl+x
     # para sus propias cosas, y aqui el editor esta siempre enfocado: sin
@@ -42,6 +55,11 @@ class InterceptaScreen(ModalScreen):
         self.interceptor = interceptor
         self.actual: intercepta.Detenida | None = None
         self._insistido = False
+        # el texto tal como lo devuelve el editor recien cargado, sin
+        # tocar. NO es `actual.crudo`: el TextArea reescribe los saltos
+        # (ver `_restaurar_cuerpo`), asi que «no se edito» solo se puede saber
+        # comparando texto del editor contra texto del editor
+        self._cargado = ""
 
     def compose(self) -> ComposeResult:
         with Vertical(id="itc-caja"):
@@ -78,6 +96,7 @@ class InterceptaScreen(ModalScreen):
             self._insistido = False
             editor.read_only = False
             editor.text = primera.crudo
+            self._cargado = editor.text
             self.query_one("#itc-ayuda", Static).update(
                 Text(self.AYUDA, style=P.tenue))
         self._titulo(len(pendientes))
@@ -102,8 +121,21 @@ class InterceptaScreen(ModalScreen):
              "esc cerrar (sigue encendida)")
 
     def action_soltar(self) -> None:
+        if self.actual is None:
+            return
         texto = self.query_one("#int-crudo", TextArea).text
-        aviso = self._revisar(texto)
+        if texto == self._cargado:
+            # sin tocar: sale la original, byte a byte. Mandar el texto
+            # del editor convertiria cada \n suelto en \r\n y romperia
+            # cualquier binario (la firma de un PNG lleva uno)
+            self._resolver(intercepta.SOLTAR, None)
+            return
+        texto, cuerpo_editado = self._restaurar_cuerpo(texto)
+        avisos = [self._revisar(texto)]
+        if cuerpo_editado and "\ufffd" in _partir(self.actual.crudo)[2]:
+            avisos.append("el cuerpo es binario y editarlo lo corrompe: "
+                          "los bytes que no son UTF-8 saldran como EF BF BD")
+        aviso = "  ·  ".join(a for a in avisos if a)
         if aviso and not self._insistido:
             # no se suelta a la primera: avisar y dejar corregir. Pero la
             # ultima palabra es del analista, asi que insistir la manda
@@ -114,6 +146,28 @@ class InterceptaScreen(ModalScreen):
                      style=P.acento))
             return
         self._resolver(intercepta.SOLTAR, texto)
+
+    def _restaurar_cuerpo(self, texto: str) -> tuple[str, bool]:
+        """Devuelve el cuerpo a como era donde el analista no lo toco.
+
+        El editor tiene un unico estilo de salto para todo el documento,
+        y las cabeceras imponen \r\n: un JSON con \n saldria con \r\n,
+        y un binario perderia sus bytes de salto. Asi que:
+
+          - si el cuerpo no se edito (solo las cabeceras), vuelve el
+            cuerpo ORIGINAL, sin pasar por el editor;
+          - si se edito y el original solo usaba \n, el editado tambien.
+
+        Devuelve el texto a mandar y si el cuerpo se edito.
+        """
+        cabeza, sep, cuerpo = _partir(texto)
+        _, _, cargado = _partir(self._cargado)
+        _, _, original = _partir(self.actual.crudo)
+        if cuerpo == cargado:
+            return cabeza + sep + original, False
+        if "\n" in original and "\r" not in original:
+            cuerpo = cuerpo.replace("\r\n", "\n")
+        return cabeza + sep + cuerpo, True
 
     @staticmethod
     def _revisar(texto: str) -> str:
