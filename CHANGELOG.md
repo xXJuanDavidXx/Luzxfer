@@ -5,6 +5,25 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [0.13.1] — 2026-11-02
+
+### Corregido
+- **Un reflejo en una página de error del servidor ya no es un candidato.**
+  Medido contra DVWA: fuzzear un segmento de ruta devuelve un 404 de Apache
+  que **repite la URL pedida**, así que el marcador vuelve — pero no lo
+  refleja la aplicación, lo refleja la página de error del servidor. Como
+  fuzzear rutas genera 404 por naturaleza, cada barrido salía contaminado.
+  Ahora, si el payload convierte un recurso que funcionaba en un error, no
+  se concluye nada. Si el baseline **ya** era un error, sí cuenta: ahí el
+  error no lo causó el payload.
+  - Contra DVWA: de 5 candidatos a 3, y los tres sobre el parámetro
+    realmente inyectable. Misma detección, 40 % menos ruido.
+
+### Cambiado
+- El **baseline se comparte** entre las estrategias del mismo punto. Varias
+  lo necesitan, y pedirlo una vez por estrategia mandaba la misma petición
+  repetida contra el objetivo.
+
 ## [0.13.0] — 2026-11-02
 
 ### Añadido

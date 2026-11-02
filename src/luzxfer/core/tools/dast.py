@@ -114,6 +114,7 @@ ESTRATEGIAS: dict[str, EstrategiaPayloads] = {
         wstg=["WSTG-INPV-01", "WSTG-INPV-02"],
         evalua=_eval_reflejo,
         severidad="high", confianza="media",
+        ignorar_error_nuevo=True,
     ),
     "sqli_error": EstrategiaPayloads(
         nombre="sqli_error",
@@ -249,11 +250,16 @@ class Escaneo:
                 return flujo
             return enviar
 
+        # un baseline por PUNTO, compartido por todas sus estrategias
+        bases: dict[int, dict] = {}
+
         def trabajo(tarea):
             punto, estrategia = tarea
             if self._parar:
                 return None
-            ctx = Contexto(self.crudo, punto, enviar_para(punto), oob=self.oob)
+            cache = bases.setdefault(id(punto), {})
+            ctx = Contexto(self.crudo, punto, enviar_para(punto),
+                           oob=self.oob, cache_baseline=cache)
             try:
                 hallazgo = estrategia.probar(ctx)
             except Exception:

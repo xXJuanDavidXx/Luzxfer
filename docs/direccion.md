@@ -381,3 +381,14 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   **La leccion, otra vez la misma:** la herramienta se prueba
   ejecutandola. Ningun test unitario iba a decirme que el escaner estaba
   reconfigurando el objetivo mientras lo escaneaba.
+- **2026-11-02** — Sospeche que el `reflejo` sobre segmentos de ruta era
+  ruido y lo MEDI antes de tocar nada: el marcador volvia dentro de un 404
+  de Apache que repite la URL. No era la aplicacion reflejando entrada, era
+  la pagina de error del servidor. Como fuzzear rutas genera 404 por
+  naturaleza, eso contaminaba cada barrido. Con la guarda: de 5 candidatos
+  a 3 en DVWA, los tres sobre el parametro que de verdad inyecta.
+  **El matiz que no se podia perder:** si el baseline YA era un error, el
+  reflejo si cuenta, porque entonces el error no lo causo el payload y la
+  aplicacion esta respondiendo asi de verdad.
+  De paso, el baseline pasa a compartirse entre las estrategias del mismo
+  punto: varias lo piden y se estaba mandando la misma peticion repetida.

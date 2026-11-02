@@ -300,3 +300,54 @@ def test_la_cota_de_peticiones_es_real():
     e.probar(ctx)
     assert len(enviados) <= e.peticiones, \
         f"mando {len(enviados)} y declara {e.peticiones}"
+
+
+# ------------------------------- reflejo: no confundir con un 404 del servidor
+def test_un_reflejo_en_un_404_no_es_un_hallazgo():
+    """Medido contra DVWA: fuzzear un segmento de ruta da un 404 de Apache
+    que REPITE la URL pedida. El marcador vuelve, pero no lo refleja la
+    aplicacion: lo refleja la pagina de error del servidor. Como fuzzear
+    rutas genera 404s por naturaleza, sin esta guarda cada barrido saldria
+    contaminado."""
+    def guion(payload):
+        if payload == "hola":
+            return 200, b"<html>pagina normal</html>"
+        return 404, f"<h1>Not Found</h1><p>The requested URL {payload} ...".encode()
+
+    assert dast.ESTRATEGIAS["reflejo"].probar(_ctx_guion(guion)) is None
+
+
+def test_un_reflejo_en_la_pagina_de_verdad_si_es_un_hallazgo():
+    """La guarda no puede tragarse la senal buena."""
+    def guion(payload):
+        return 200, f"<html>buscaste: {payload}</html>".encode()
+
+    h = dast.ESTRATEGIAS["reflejo"].probar(_ctx_guion(guion))
+    assert h is not None
+
+
+def test_un_reflejo_en_un_500_que_ya_estaba_si_cuenta():
+    """Si el baseline YA era un error, el error no lo causo el payload: la
+    aplicacion esta respondiendo asi y reflejar ahi sigue siendo senal."""
+    def guion(payload):
+        return 500, f"<html>error: {payload}</html>".encode()
+
+    assert dast.ESTRATEGIAS["reflejo"].probar(_ctx_guion(guion)) is not None
+
+
+def test_el_baseline_se_comparte_entre_estrategias_del_mismo_punto():
+    """Cada estrategia que lo pida no puede costar una peticion mas: el
+    baseline es el mismo para todas las del mismo punto."""
+    enviados = []
+    punto = dast.puntos(CRUDO)[0]
+    compartido: dict = {}
+
+    def enviar(p):
+        enviados.append(p)
+        return _flujo(b"igual")
+
+    c1 = Contexto(CRUDO, punto, enviar, cache_baseline=compartido)
+    c2 = Contexto(CRUDO, punto, enviar, cache_baseline=compartido)
+    c1.baseline()
+    c2.baseline()
+    assert enviados == ["hola"], "el segundo reusa el del primero"
