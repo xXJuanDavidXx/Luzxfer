@@ -45,12 +45,15 @@ class Contexto:
     """
 
     def __init__(self, crudo: str, punto, enviar_fn: Callable[[str], Flow],
-                 *, oob=None):
+                 *, oob=None, cache_baseline: dict | None = None):
         self.crudo = crudo
         self.punto = punto
         self._enviar = enviar_fn
         self.oob = oob
-        self._baseline: Flow | None = None
+        # compartido entre todas las estrategias del MISMO punto: varias lo
+        # necesitan y pedirlo una vez por estrategia multiplicaria el
+        # trafico mandando la misma peticion una y otra vez
+        self._cache = cache_baseline if cache_baseline is not None else {}
         self.flujos: list[Flow] = []
 
     def enviar(self, payload: str) -> Flow:
@@ -64,9 +67,9 @@ class Contexto:
         Se cachea porque casi toda comparacion la necesita y pedirla una
         vez por estrategia multiplicaria el trafico sin anadir nada.
         """
-        if self._baseline is None:
-            self._baseline = self.enviar(self.punto.valor)
-        return self._baseline
+        if "base" not in self._cache:
+            self._cache["base"] = self.enviar(self.punto.valor)
+        return self._cache["base"]
 
 
 @dataclass(slots=True)
@@ -85,6 +88,12 @@ class EstrategiaPayloads:
     severidad: str = "medium"
     confianza: str = "media"
     requiere: frozenset = field(default_factory=frozenset)
+    # Si el payload convierte un recurso que funcionaba en un error, lo que
+    # vuelve no es la aplicacion reflejando entrada: es la pagina de error
+    # del SERVIDOR repitiendo la URL. Medido contra DVWA: fuzzear segmentos
+    # de ruta da 404 de Apache que repiten lo pedido, y como fuzzear rutas
+    # genera 404s por naturaleza, sin esto cada barrido saldria contaminado.
+    ignorar_error_nuevo: bool = False
 
     @property
     def peticiones(self) -> int:
@@ -103,6 +112,10 @@ class EstrategiaPayloads:
             r = flujo.response
             if r is None:
                 continue
+            if self.ignorar_error_nuevo and r.status >= 400:
+                base = ctx.baseline().response
+                if base is not None and base.status < 400:
+                    continue
             cab = {k.lower(): v for k, v in r.headers}
             motivo = self.evalua(r.text(limite=400_000), r.status, cab)
             if motivo is not None:
