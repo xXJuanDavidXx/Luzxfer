@@ -309,3 +309,19 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   puerto. La leccion repetida —el valor de verdad sale de usar la
   herramienta contra un objetivo real; esto no lo cazo ningun test porque
   todos los tests traian el puerto en el Host.
+- **2026-11-02** — Rama `termux` creada en `v0.11.1`, el ultimo commit estable
+  verificado (675 tests, ruff limpio). Es un punto conocido-bueno para la
+  version portatil, no un fork de desarrollo: **no se commitea en ella** salvo
+  que algo no se pueda mantener detras de un extra.
+  **El motivo de la reserva:** luzxfer ya corre en Termux sin `[mitm]` ni
+  `[br]` gracias al mecanismo de extras. Si las costuras del DAST quedan tan
+  limpias como exige su spec (`core/` stdlib, OOB detras de `[oob]`), la
+  version de Termux *es* la misma rama sin extras instalados. Una rama que
+  diverge de verdad significa arreglar cada bug dos veces.
+  Entran al repo el spec y el plan del DAST 10/10
+  (`docs/superpowers/{specs,plans}/2026-11-02-dast-10x*`). Quedan **dos
+  decisiones abiertas** antes de empezar, anotadas aqui para no perderlas:
+  si el servidor OOB por defecto debe ser el publico (el spec dice que si; yo
+  sostengo que contradice la decision 3 de este documento, la que aplazo la
+  IA por sacar datos del cliente de su perimetro), y si la FASE F
+  (nuclei/nikto) se corta.
