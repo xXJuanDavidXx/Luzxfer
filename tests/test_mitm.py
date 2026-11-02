@@ -281,3 +281,43 @@ def test_una_peticion_detenida_no_congela_a_las_demas(eco):
         assert sorted(hechas) == [0, 1, 2]
     finally:
         m.stop()
+
+
+# ----------------------------------------- _editar y los cuerpos binarios
+def _peticion(cuerpo: bytes, cabeceras=None):
+    from mitmproxy.http import Request
+    cab = cabeceras or {"Content-Type": "application/octet-stream"}
+    return Request.make("POST", "http://o.com/subir", cuerpo, cab)
+
+
+def test_editar_solo_cabeceras_no_corrompe_un_cuerpo_binario():
+    """El bug del motor integrado, tambien aqui: editar una cabecera de una
+    peticion con cuerpo binario NO puede tocar el cuerpo. _a_crudo lo
+    decodifica con 'replace', asi que sin cuidado los bytes no-UTF-8 salen
+    como EF BF BD."""
+    original = bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0xff, 0xd8, 0x00,
+                      0x80, 0x81])
+    pet = _peticion(original)
+    crudo = mitm._a_crudo(pet)
+    # el analista edita SOLO una cabecera, no el cuerpo
+    editado = crudo.replace("application/octet-stream", "image/png")
+    mitm._editar(pet, editado)
+    assert pet.raw_content == original, "el cuerpo binario tiene que quedar intacto"
+    assert pet.headers["Content-Type"] == "image/png"
+
+
+def test_editar_el_cuerpo_de_texto_se_respeta_en_mitm():
+    pet = _peticion(b"usuario=admin", {"Content-Type": "text/plain"})
+    crudo = mitm._a_crudo(pet)
+    mitm._editar(pet, crudo.replace("usuario=admin", "usuario=raiz"))
+    assert pet.raw_content == b"usuario=raiz"
+
+
+def test_editar_con_el_texto_sin_cambios_preserva_el_binario():
+    """Red de seguridad: aunque _editar reciba el crudo sin tocar —el
+    cuerpo binario ya salio lossy de _a_crudo—, los bytes originales
+    tienen que volver intactos, no su sombra en UTF-8."""
+    original = bytes([0x00, 0xff, 0x10, 0x80, 0x0d, 0x0a])
+    pet = _peticion(original)
+    mitm._editar(pet, mitm._a_crudo(pet))
+    assert pet.raw_content == original

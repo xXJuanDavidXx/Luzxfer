@@ -103,10 +103,22 @@ def _editar(pet, texto: str) -> None:
 
     El Content-Length no se toca a mano: mitmproxy lo recalcula al
     asignar el contenido, y ponerlo ademas dejaria dos.
+
+    Un cuerpo binario no se puede enseñar como texto sin perderlo
+    (`_a_crudo` lo decodifica con 'replace'). Si el analista editó solo
+    las cabeceras y no el cuerpo, hay que devolver los bytes originales:
+    re-codificar ese texto convertiria una subida que solo pasaba de
+    largo en basura, igual que en el motor integrado. Aqui los bytes
+    originales siguen en `pet.raw_content` hasta que se asigna el nuevo.
     """
     from ..tools.repeater import parse_raw
 
     metodo, ruta, _version, cabeceras, cuerpo = parse_raw(texto)
+
+    original = pet.raw_content or b""
+    if cuerpo == original.decode("utf-8", "replace").encode("utf-8"):
+        cuerpo = original
+
     pet.method = metodo
     pet.path = ruta
     pet.headers.clear()

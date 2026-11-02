@@ -7,6 +7,16 @@ experiencia de quien ya usaba la herramienta.
 
 ## [Sin publicar]
 
+### Corregido
+- **El motor mitm corrompia un cuerpo binario al editar solo sus
+  cabeceras**, el mismo fallo que ya se arreglo en el motor integrado en
+  0.9.1. `_a_crudo` muestra el cuerpo con `decode(..., "replace")`; si el
+  analista tocaba una cabecera pero no el cuerpo, `_editar` re-codificaba
+  ese texto y una subida binaria salia como `EF BF BD`. Ahora, si el cuerpo
+  no se toco, vuelven los bytes originales de `pet.raw_content`. Los dos
+  motores vuelven a comportarse igual ante lo mismo, como manda la regla de
+  diseño.
+
 ### Documentación
 - **Guía paso a paso para interceptar HTTPS con el motor mitm**, incluido
   cómo confiar en la CA (`~/.mitmproxy/mitmproxy-ca-cert.pem`) en Firefox y
