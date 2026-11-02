@@ -829,7 +829,10 @@ class LuzxferApp(App):
         if not self._barrido_avisado:
             self._barrido_avisado = True
             self.query_one("#estado", Static).update(Text(
-                f"barrido: {e.total} peticiones contra "
+                # «hasta»: el total es una cota, porque una estrategia para
+                # en cuanto encuentra. Decir una cifra exacta que luego no
+                # se alcanza seria un aviso que no se corresponde
+                f"barrido: hasta {e.total} peticiones contra "
                 f"{self._flujo_actual.request.host} · b otra vez para lanzarlo",
                 style=P.peligro))
             return

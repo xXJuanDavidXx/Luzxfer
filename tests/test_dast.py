@@ -184,7 +184,10 @@ def test_un_escaneo_real_encuentra_el_reflejo(eco):
     h, p = eco
     e = dast.Escaneo(_crudo_eco(h, p), _alc_eco(h), por_segundo=200)
     hallazgos = e.correr(lambda f: None)
-    assert e.terminado and e.enviadas == e.total
+    # `total` es una COTA, no una cuenta exacta: una estrategia para en
+    # cuanto encuentra y no agota sus payloads, asi que se manda menos
+    # trafico contra el sistema del cliente para el mismo hallazgo
+    assert e.terminado and 0 < e.enviadas <= e.total
     reflejos = [f for f in hallazgos if f.extra["prueba"] == "reflejo"]
     assert reflejos, "el eco refleja la query entera"
     assert reflejos[0].kind == "DAST"
