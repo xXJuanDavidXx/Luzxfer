@@ -294,3 +294,11 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   codigo: una funcion sin el camino para usarla es el mismo fallo de
   descubribilidad que el pie que escondia atajos, solo que en la
   documentacion.
+- **2026-11-01** — El arreglo del cuerpo binario en la interceptacion
+  (0.9.1) estaba solo en el motor integrado; el motor mitm tenia el mismo
+  fallo en `_editar`, por el mismo `decode('replace')` de `_a_crudo`.
+  Encontrado auditando a conciencia: la regla 1 dice que ninguna interfaz
+  habla con un motor concreto, y el corolario es que un fallo de
+  comportamiento en un motor casi seguro esta en el otro. Arreglado igual y
+  con tests que fallan si se revierte. La leccion: cuando se arregla algo en
+  un motor, hay que ir a mirar el otro en el acto.
