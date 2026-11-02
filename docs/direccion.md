@@ -328,10 +328,11 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
 - **2026-11-02** — Resueltas las dos decisiones abiertas del DAST 10/10.
   Yo habia propuesto exigir self-host para el OOB; **el operador lo corrigio
   y tiene razon**: exigir montar un servidor excluye a quien no tiene tiempo
-  ni dinero, y convierte una capacidad en un privilegio. Las **dos opciones
-  existen** y elige el analista al activar: publico (bug bounty, labs,
-  pentest con riesgo aceptado) o self-host (contrato que prohibe salir del
-  perimetro).
+  ni dinero, y convierte una capacidad en un privilegio.
+  **El modo no se elige de una lista: sale de si hay servidor configurado.**
+  Sin configurar nada, el OOB va contra el publico (opt-out). Configurar un
+  servidor ES el acto de optar por entrar (opt-in). Nada de "perfiles" ni de
+  preguntarle al analista en que caso de uso esta: el ya lo sabe.
   **Lo que si se conserva de la objecion:** el riesgo real de la decision 3
   no era que existiera la opcion, era que se activara *por descuido*. Asi
   que activar OOB es deliberado, el canal se elige explicitamente, y mientras
