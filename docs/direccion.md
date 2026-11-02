@@ -286,3 +286,11 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   cabecera sigue parseandose con cualquiera de los dos. Confirmado antes
   de arreglar que el TextArea de Textual SI conserva los \r\n, asi que el
   arreglo en el nucleo basta para toda la ruta del editor.
+- **2026-11-01** — El usuario fue a usar luzxfer contra un lab de
+  PortSwigger (HTTPS) y choco con que la Opcion A —el motor mitm, que es
+  el unico que intercepta TLS— no estaba documentada: ni como arrancarla
+  ni, sobre todo, como confiar en la CA. Un motor que no se puede poner en
+  marcha es como no tenerlo. Añadida guia paso a paso. La leccion no es de
+  codigo: una funcion sin el camino para usarla es el mismo fallo de
+  descubribilidad que el pie que escondia atajos, solo que en la
+  documentacion.
