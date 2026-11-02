@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from urllib.parse import parse_qsl, urlencode
+from urllib.parse import parse_qsl, quote, unquote, urlencode
 
 from . import repeater
 from .cuerpo import es_json
@@ -24,6 +24,33 @@ from .cuerpo import es_json
 # produce ruido sin senal. `bool` se excluye a mano porque en Python es
 # subclase de int y si no se colaria.
 _TIPOS_HOJA = (str, int, float)
+
+# Donde una inyeccion por cabecera es plausible. NO son todas a proposito:
+# inyectar en cada cabecera multiplica el trafico y el ruido sin anadir
+# senal, y el objetivo del DAST es senal por peticion enviada.
+#   User-Agent, Referer -> acaban en logs, paneles y consultas SQL
+#   X-Forwarded-*       -> los procesan proxies y la logica de la app
+#
+# `Host` NO esta, a proposito. Es la unica cabecera que toda peticion
+# lleva, asi que incluirla convertiria «aqui no hay nada que inyectar» en
+# «escanea siempre», multiplicando el trafico contra el sistema de un
+# cliente sin que nadie lo pidiera. Ademas esta herramienta ya trata
+# editar el Host como una prueba deliberada y no como una mutacion
+# rutinaria (ver el motor y el Intruder). La inyeccion por Host es una
+# clase propia de la matriz y se hara con su estrategia, no disparandola
+# en cada GET.
+CABECERAS_INYECTABLES = ("user-agent", "referer",
+                         "x-forwarded-for", "x-forwarded-host")
+
+
+class PayloadNoRepresentable(ValueError):
+    """El payload no sobrevive a latin-1, que es como viaja una cabecera.
+
+    `build_raw` codifica la cabeza con `errors="replace"`: un payload con
+    acentos, CJK o emoji saldria mutado y lo que se probaria no seria lo
+    que se quiso probar. Como el fuzzer muta a proposito, aqui se dice en
+    vez de callarlo.
+    """
 
 
 @dataclass(slots=True)
@@ -89,6 +116,63 @@ def _cuerpo_json(cabeceras, cuerpo: bytes):
         return None
 
 
+def _cookies_de(cabeceras) -> list[tuple[str, str]]:
+    """(nombre, valor) de cada par del Cookie:, en orden."""
+    for k, v in cabeceras:
+        if k.lower() == "cookie":
+            pares = []
+            for trozo in v.split(";"):
+                nombre, sep, valor = trozo.partition("=")
+                if sep:
+                    pares.append((nombre.strip(), valor.strip()))
+            return pares
+    return []
+
+
+def _comprobar_latin1(payload: str) -> None:
+    try:
+        payload.encode("latin-1")
+    except UnicodeEncodeError as e:
+        raise PayloadNoRepresentable(
+            f"el payload no se puede mandar en una cabecera: {payload!r} "
+            f"no es representable en latin-1") from e
+
+
+def _boundary(cabeceras) -> str:
+    """El boundary del Content-Type multipart, o cadena vacia."""
+    ctype = _tipo_contenido(cabeceras)
+    if "multipart/form-data" not in ctype.lower():
+        return ""
+    for trozo in ctype.split(";"):
+        clave, sep, valor = trozo.partition("=")
+        if sep and clave.strip().lower() == "boundary":
+            return valor.strip().strip('"')
+    return ""
+
+
+def _partes_multipart(cuerpo: str, boundary: str):
+    """(nombre, valor, indice) de cada parte con nombre, en orden.
+
+    Se parte por el boundary y se separa la cabecera de la parte de su
+    valor por la linea en blanco, igual que manda el formato. Lo que no
+    tenga `name=` no es un campo y no se toca.
+    """
+    sep = f"--{boundary}"
+    for i, bloque in enumerate(cuerpo.split(sep)):
+        if not bloque.strip() or bloque.startswith("--"):
+            continue            # el preambulo y el cierre no son partes
+        cabeza, marca, valor = bloque.partition("\r\n\r\n")
+        if not marca:
+            continue
+        nombre = ""
+        for trozo in cabeza.split(";"):
+            clave, igual, v = trozo.partition("=")
+            if igual and clave.strip().lower() == "name":
+                nombre = v.strip().strip('"')
+        if nombre:
+            yield nombre, valor[:-2] if valor.endswith("\r\n") else valor, i
+
+
 # ---------------------------------------------------------------- puntos
 def puntos(crudo: str) -> list[Punto]:
     """Donde se puede inyectar: query, cuerpo de formulario y hojas JSON."""
@@ -100,6 +184,28 @@ def puntos(crudo: str) -> list[Punto]:
     salida: list[Punto] = []
     for i, (k, v) in enumerate(parse_qsl(consulta, keep_blank_values=True)):
         salida.append(Punto(nombre=k, valor=v, donde="query", indice=i))
+
+    for i, (k, v) in enumerate(cabeceras):
+        if k.lower() in CABECERAS_INYECTABLES:
+            salida.append(Punto(nombre=k, valor=v, donde="cabecera", indice=i))
+
+    for i, (k, v) in enumerate(_cookies_de(cabeceras)):
+        salida.append(Punto(nombre=k, valor=v, donde="cookie", indice=i))
+
+    # segmentos de la ruta: alimentan traversal y LFI, donde el parametro
+    # no viaja en la query sino dentro del propio camino
+    segmentos = [s for s in _c.split("/") if s]
+    for i, s in enumerate(segmentos, start=1):
+        salida.append(Punto(nombre=str(i), valor=unquote(s),
+                            donde="ruta", indice=i))
+
+    boundary = _boundary(cabeceras)
+    if cuerpo and boundary:
+        texto = cuerpo.decode("utf-8", "replace")
+        for nombre, valor, idx in _partes_multipart(texto, boundary):
+            salida.append(Punto(nombre=nombre, valor=valor,
+                                donde="multipart", indice=idx))
+        return salida
 
     if cuerpo and _es_formulario(cabeceras):
         texto = cuerpo.decode("utf-8", "replace")
@@ -134,6 +240,43 @@ def con_payload(crudo: str, punto: Punto, payload: str) -> str:
 
     if punto.donde == "query":
         consulta = _cambiado(consulta)
+    elif punto.donde == "cabecera":
+        _comprobar_latin1(payload)
+        cabeceras = list(cabeceras)
+        cabeceras[punto.indice] = (punto.nombre, payload)
+    elif punto.donde == "cookie":
+        _comprobar_latin1(payload)
+        pares = _cookies_de(cabeceras)
+        pares[punto.indice] = (punto.nombre, payload)
+        junta = "; ".join(f"{k}={v}" for k, v in pares)
+        # solo la PRIMERA Cookie, que es de la que se leyeron los pares.
+        # Pisar todas borraria las demas y duplicaria esta: mandar la misma
+        # cabecera dos veces es una tecnica de prueba, no un error.
+        cabeceras = list(cabeceras)
+        for i, (k, _v) in enumerate(cabeceras):
+            if k.lower() == "cookie":
+                cabeceras[i] = (k, junta)
+                break
+    elif punto.donde == "ruta":
+        # se codifica el segmento: un payload con espacios partiria la
+        # linea de peticion en tres y no llegaria lo que se queria probar
+        trozos = camino_url.split("/")
+        vistos = 0
+        for i, s in enumerate(trozos):
+            if not s:
+                continue
+            vistos += 1
+            if vistos == punto.indice:
+                trozos[i] = quote(payload, safe="")
+                break
+        camino_url = "/".join(trozos)
+    elif punto.donde == "multipart":
+        texto = cuerpo.decode("utf-8", "replace")
+        boundary = _boundary(cabeceras)
+        nuevo_cuerpo = _multipart_con(texto, boundary, punto, payload)
+        if nuevo_cuerpo is not None:
+            cuerpo = nuevo_cuerpo.encode()
+            cabeceras = _con_largo(cabeceras, len(cuerpo))
     elif punto.donde == "json":
         datos = _cuerpo_json(cabeceras, cuerpo)
         if datos is not None and punto.camino:
@@ -149,6 +292,28 @@ def con_payload(crudo: str, punto: Punto, payload: str) -> str:
     lineas = [f"{metodo} {ruta} {version}"]
     lineas += [f"{k}: {v}" for k, v in cabeceras]
     return "\r\n".join(lineas) + "\r\n\r\n" + cuerpo.decode("utf-8", "replace")
+
+
+def _multipart_con(texto: str, boundary: str, punto, payload: str):
+    """El cuerpo multipart con el valor de esa parte sustituido.
+
+    Se reconstruye por bloques en vez de con un reemplazo de texto: el
+    valor viejo podria aparecer en otra parte, y cambiar la equivocada
+    probaria algo distinto de lo que se quiso probar.
+    """
+    if not boundary:
+        return None
+    sep = f"--{boundary}"
+    bloques = texto.split(sep)
+    if not 0 <= punto.indice < len(bloques):
+        return None
+    bloque = bloques[punto.indice]
+    cabeza, marca, valor = bloque.partition("\r\n\r\n")
+    if not marca:
+        return None
+    cola = "\r\n" if valor.endswith("\r\n") else ""
+    bloques[punto.indice] = cabeza + marca + payload + cola
+    return sep.join(bloques)
 
 
 def _con_largo(cabeceras, n: int) -> list[tuple[str, str]]:

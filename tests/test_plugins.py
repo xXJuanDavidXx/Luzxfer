@@ -259,7 +259,10 @@ def registrar(api):
     sin = dast.Escaneo(crudo, alc.Alcance.desde_texto("+objetivo.com"))
     con = dast.Escaneo(crudo, alc.Alcance.desde_texto("+objetivo.com"),
                        pruebas_extra=reg.pruebas)
-    assert con.total == sin.total + 2
+    # el plugin anade UNA prueba de dos payloads; el total crece en dos
+    # por cada punto de inyeccion, no en dos a secas
+    n = len(dast.puntos(crudo))
+    assert con.total == sin.total + n * 2
 
 
 # -------------------------------------- el ejemplo que trae el proyecto
