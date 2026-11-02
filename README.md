@@ -50,9 +50,13 @@ Hay dos extras opcionales. Los dos compilan y por eso ninguno funciona en
 Termux — justamente por eso son extras y no dependencias:
 
 ```bash
-pip install -e '.[mitm]'   # interceptación HTTPS
+pip install -e '.[mitm]'   # interceptación HTTPS (ver «Interceptar HTTPS»)
 pip install -e '.[br]'     # leer cuerpos en brotli (ver Compresión)
 ```
+
+Para interceptar sitios `https://` con el navegador no basta con instalar
+`[mitm]`: hay que confiar en la CA. El paso a paso está en
+[Interceptar HTTPS, paso a paso](#interceptar-https-paso-a-paso).
 
 ## Uso
 
@@ -734,6 +738,55 @@ motor, así que cambiar de motor es cambiar una clase.
 ```bash
 luzxfer --motor mitm        # HTTPS, HTTP/2 y WebSockets
 ```
+
+### Interceptar HTTPS, paso a paso
+
+Para que el navegador pase por luzxfer contra un sitio `https://` —un lab de
+PortSwigger, una aplicación real— hace falta el motor `mitm` y confiar en su
+CA. Una vez:
+
+**1. Instala el extra y arranca el motor mitm:**
+
+```bash
+pip install 'luzxfer[mitm]'
+luzxfer --motor mitm                 # escucha en 127.0.0.1:8080
+```
+
+La primera vez, mitmproxy genera su autoridad de certificación en
+`~/.mitmproxy/`. No hay que crearla a mano: se crea sola al arrancar.
+
+**2. Apunta el navegador al proxy** `127.0.0.1:8080` (HTTP y HTTPS). En
+Firefox: *Ajustes → Red → Configuración → Configuración manual*. Firefox
+trae su propio almacén de certificados, que es el más cómodo para esto
+porque no toca el del sistema.
+
+**3. Instala la CA en el navegador.** El certificado está en:
+
+```
+~/.mitmproxy/mitmproxy-ca-cert.pem
+```
+
+- **Firefox:** *Ajustes → Privacidad y seguridad → Certificados → Ver
+  certificados → Autoridades → Importar*, elige ese `.pem` y marca
+  **«Confiar para identificar sitios web»**.
+- **Chromium/Chrome:** usa el almacén del sistema; es más cómodo tener el
+  proxy activo e ir a `http://mitm.it`, que detecta el navegador y da el
+  instalador. (Ese atajo solo funciona con el tráfico pasando por el
+  proxy.)
+
+**4. Comprueba** que navegas con TLS y el tráfico aparece en el historial.
+Si el navegador avisa de certificado inválido, la CA no quedó confiada:
+repite el paso 3.
+
+> **Esto es tu CA, en tu máquina.** Confiar en ella hace que tu navegador
+> acepte los certificados que genera luzxfer para cada host: es lo que
+> permite ver el tráfico en claro. No instales una CA de mitm que no sea la
+> tuya, y si dejas de usar esto, bórrala del navegador.
+
+Para un **lab local** sin TLS no hace falta nada de esto: sirve el motor
+integrado en modo inverso (ver [Sesiones](#sesiones)). Y si solo quieres
+mandar peticiones sueltas a un objetivo HTTPS sin montar el proxy, el
+**repeater y el Intruder hablan TLS por su cuenta** (ver [Repeater](#repeater)).
 
 ### Flujos perdidos
 

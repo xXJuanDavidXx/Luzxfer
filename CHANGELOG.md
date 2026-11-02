@@ -5,6 +5,16 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [Sin publicar]
+
+### Documentación
+- **Guía paso a paso para interceptar HTTPS con el motor mitm**, incluido
+  cómo confiar en la CA (`~/.mitmproxy/mitmproxy-ca-cert.pem`) en Firefox y
+  en Chromium. Faltaba por completo: instalar `[mitm]` no basta, y sin
+  confiar en la CA el navegador rechaza todo, asi que el motor que mas
+  acerca la herramienta a Burp era inusable para quien no supiera ya el
+  truco. Enlazada desde Instalación y referida desde Motores.
+
 ## [0.9.0] — 2026-11-01
 
 ### Añadido
