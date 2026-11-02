@@ -5,6 +5,43 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [0.12.0] — 2026-11-02
+
+### Añadido
+- **FASE A del DAST: el modelo de puntos de inyección pasa de dos clases a
+  seis.** Antes solo se inyectaba en la query y en un cuerpo de formulario;
+  un cuerpo JSON se rechazaba entero. Ahora:
+  - **JSON**: una hoja escalar por punto, con su ruta (`user.name`, `ids.0`).
+    Al sustituir se re-serializa, así que un payload con comillas y llaves
+    viaja *como valor* y no parte la estructura. `null` y booleanos no son
+    puntos: meter una cadena donde había `true` es un cambio de tipo, no una
+    inyección, y produce ruido sin señal.
+  - **Cabeceras marcables** (`User-Agent`, `Referer`, `X-Forwarded-For`,
+    `X-Forwarded-Host`). No todas, a propósito: inyectar en cada cabecera
+    multiplica el tráfico sin añadir señal.
+  - **Cookies**, **segmentos de ruta** (donde vive el parámetro en traversal
+    y LFI) y **campos multipart**, troceados por su boundary.
+  - Un payload que no sobrevive a latin-1 lanza `PayloadNoRepresentable` en
+    vez de viajar mutado en silencio.
+
+### Corregido
+- Dos cabeceras `Cookie` se pisaban al sustituir: la segunda se perdía y la
+  primera se duplicaba. Mandar la misma cabecera dos veces es una técnica de
+  prueba, no un error.
+
+### Decisiones
+- **`Host` no es un punto de inyección genérico.** Toda petición lo lleva, así
+  que incluirlo convertía «aquí no hay nada que inyectar» en «escanea
+  siempre», multiplicando el tráfico contra el sistema de un cliente. La
+  inyección por `Host` será su propia estrategia. Lo detectaron los tests
+  existentes al ponerse en rojo.
+- **El modo del OOB saldrá de la configuración, no de un menú**: sin
+  configurar nada va contra el servidor público (opt-out); configurar un
+  servidor *es* el acto de optar por entrar (opt-in).
+- **FASE F (nuclei/nikto) cortada.** Eran ejemplos, y atar el diseño a dos
+  binarios era el error. El caso de uso —aprovechar herramientas que el
+  analista ya tenga— se replantea desde cero y por la API de plugins.
+
 ## [0.11.1] — 2026-11-01
 
 ### Corregido
