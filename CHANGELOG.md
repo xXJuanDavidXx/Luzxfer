@@ -5,6 +5,40 @@ Versionado semántico, con una salvedad: en 0.x un cambio de comportamiento
 por defecto sube la versión menor, porque es lo que de verdad cambia la
 experiencia de quien ya usaba la herramienta.
 
+## [0.13.0] — 2026-11-02
+
+### Añadido
+- **SQLi ciega por diferencia booleana** (FASE B3). Es la familia que caza
+  lo que no deja rastro en la respuesta. El caso que la justifica está
+  medido: el login de OWASP Juice Shop **es** inyectable y ninguna de las
+  cuatro familias anteriores podía verlo —no hay reflejo ni cadena de error
+  SQL—; lo único que lo delata es que con la condición verdadera la
+  respuesta cambia (401/26 B → 200/784 B).
+  - Protocolo anti-falso-positivo: se toma el baseline **dos veces** para
+    medir cuánto varía la página sola; si varía demasiado no se concluye
+    nada; la condición **falsa** debe parecerse al baseline (si ya cambia,
+    lo que alteró la respuesta fue inyectar algo raro, no la condición); y
+    la **verdadera** no puede parecerse a la falsa.
+  - Se comparan estado y tamaño, no el cuerpo: casi cualquier página real
+    trae algo que cambia solo y comparar texto daría distinto siempre.
+
+### Corregido
+- **El barrido fuzzeaba las cookies de sesión y anti-CSRF.** Medido contra
+  DVWA: se llevaba **un tercio del tráfico** (36 de 108 peticiones) sin
+  poder encontrar nada, y mutar la cookie `security` **cambiaba el nivel de
+  dificultad a mitad del escaneo** — se probaba algo distinto de lo que el
+  analista creía. Ahora se excluyen por nombre conocido. La exclusión es por
+  nombre y no «todas las cookies»: una cookie de aplicación (idioma,
+  carrito, tenant) es superficie legítima y de las más olvidadas.
+
+### Medido contra objetivos reales
+- OWASP Juice Shop: SQLi en `/rest/products/search` (error) y en
+  `/rest/user/login` (booleana). **Cero candidatos** en dos endpoints
+  benignos.
+- DVWA `low` y `medium` vía POST: ambas detectadas, la `medium` por el par
+  numérico. Tras excluir las cookies de sesión, **31 % menos peticiones con
+  la misma detección** (88 → 61).
+
 ## [0.12.0] — 2026-11-02
 
 ### Añadido

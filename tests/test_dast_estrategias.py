@@ -204,3 +204,99 @@ def test_un_wstg_inventado_en_una_estrategia_lo_rechaza_el_plugin():
                               evalua=lambda c, s, h: None)
     with pytest.raises(ValueError):
         api.prueba(mala)
+
+
+# ------------------------------------------------ booleano ciego (B3)
+from luzxfer.core.tools.dast_estrategias import EstrategiaBooleana  # noqa: E402
+
+
+def _ctx_guion(guion):
+    """Contexto cuyo `enviar` responde segun un guion payload -> (estado, cuerpo).
+
+    Permite escribir el comportamiento del servidor sin levantar nada, que
+    es como se prueba un PROTOCOLO: lo que importa no es la red, es que la
+    decision sea la correcta ante cada forma de responder.
+    """
+    punto = dast.puntos(CRUDO)[0]
+
+    def enviar(payload):
+        estado, cuerpo = guion(payload)
+        return _flujo(cuerpo, estado)
+
+    return Contexto(CRUDO, punto, enviar)
+
+
+def _como_juice_shop(payload):
+    """401 corto salvo que la condicion sea verdadera: 200 largo.
+
+    Es el caso medido contra OWASP Juice Shop: el login es inyectable y
+    NINGUNA de las cuatro familias viejas podia verlo, porque no hay
+    reflejo ni cadena de error SQL. Lo unico que lo delata es que la
+    respuesta cambia.
+    """
+    if "1=1" in payload or "'1'='1" in payload:
+        return 200, b'{"authentication":{"token":"eyJ0eXAiOi' + b"x" * 700 + b'"}}'
+    return 401, b"Invalid email or password."
+
+
+def test_el_booleano_caza_el_caso_de_juice_shop():
+    """Criterio de aceptacion de B3, tomado de un objetivo real."""
+    h = EstrategiaBooleana().probar(_ctx_guion(_como_juice_shop))
+    assert h is not None
+    assert h.confianza == "alta"
+    assert "1=1" in h.payload
+
+
+def test_un_endpoint_que_no_inyecta_no_da_positivo():
+    """Responde igual pase lo que pase."""
+    h = EstrategiaBooleana().probar(
+        _ctx_guion(lambda p: (200, b"siempre lo mismo")))
+    assert h is None
+
+
+def test_una_pagina_que_varia_sola_no_da_positivo():
+    """El riesgo real del diferencial: un token CSRF o un timestamp hacen
+    que cada respuesta mida distinto. Sin medir esa variacion natural,
+    CUALQUIER payload pareceria haber cambiado algo."""
+    import itertools
+    contador = itertools.count()
+
+    def varia(payload):
+        n = next(contador)
+        return 200, f"<token>{'x' * (n * 97)}</token>".encode()
+
+    assert EstrategiaBooleana().probar(_ctx_guion(varia)) is None
+
+
+def test_un_cambio_solo_de_tamano_tambien_cuenta():
+    """No hace falta que cambie el codigo de estado: en muchas apps la
+    condicion verdadera devuelve mas filas con el mismo 200."""
+    def por_tamano(payload):
+        if "1=1" in payload or "'1'='1" in payload:
+            return 200, b"resultado " * 200
+        return 200, b"sin resultados"
+
+    h = EstrategiaBooleana().probar(_ctx_guion(por_tamano))
+    assert h is not None
+
+
+def test_si_la_condicion_falsa_ya_cambia_la_respuesta_no_se_concluye():
+    """Si el payload falso YA altera la respuesta, lo que cambio no fue la
+    condicion sino el hecho de inyectar algo raro: no es un booleano."""
+    def rompe_con_cualquier_cosa(payload):
+        if payload == "hola":
+            return 200, b"normal"
+        return 500, b"error generico"
+
+    assert EstrategiaBooleana().probar(_ctx_guion(rompe_con_cualquier_cosa)) is None
+
+
+def test_la_cota_de_peticiones_es_real():
+    e = EstrategiaBooleana()
+    enviados = []
+    punto = dast.puntos(CRUDO)[0]
+    ctx = Contexto(CRUDO, punto,
+                   lambda p: (enviados.append(p), _flujo(b"igual"))[1])
+    e.probar(ctx)
+    assert len(enviados) <= e.peticiones, \
+        f"mando {len(enviados)} y declara {e.peticiones}"

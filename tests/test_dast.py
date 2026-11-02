@@ -154,8 +154,10 @@ def test_dentro_del_alcance_si_arranca():
 def test_el_total_se_sabe_antes_de_mandar_nada():
     e = dast.Escaneo(CRUDO, _dentro())
     puntos = len(dast.puntos(CRUDO))
-    payloads = sum(len(p.payloads) for p in dast.PRUEBAS.values())
-    assert e.total == puntos * payloads
+    # `peticiones` es la interfaz uniforme: no toda estrategia tiene una
+    # lista de payloads (la booleana manda pares y mide la diferencia)
+    cota = sum(x.peticiones for x in dast.ESTRATEGIAS.values())
+    assert e.total == puntos * cota
 
 
 def test_sin_puntos_de_inyeccion_no_hay_escaneo():
@@ -319,7 +321,9 @@ async def test_dentro_del_alcance_pide_confirmacion_antes_de_disparar(eco):
         assert "peticion" in estado.lower() and "b" in estado.lower()
 
         await pilot.press("b")
-        for _ in range(100):
+        # el barrido manda mas peticiones desde que hay familia booleana, y
+        # la correa es de 5/s a proposito: hay que esperar de verdad
+        for _ in range(400):
             await pilot.pause(0.05)
             if app._escaneo is not None and app._escaneo.terminado:
                 break

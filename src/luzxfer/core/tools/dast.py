@@ -31,6 +31,7 @@ from . import repeater
 from .alcance import Alcance
 from .dast_estrategias import (
     Contexto,
+    EstrategiaBooleana,
     EstrategiaPayloads,
     Hallazgo,
     Prueba,
@@ -48,7 +49,8 @@ MARCA = "lzx9q7z"
 # puede romper los plugins que ya existen.
 __all__ = [
     "Contexto", "ESTRATEGIAS", "Escaneo", "EstrategiaPayloads",
-    "FueraDeAlcance", "Hallazgo", "PRUEBAS", "Prueba", "Punto",
+    "EstrategiaBooleana", "FueraDeAlcance", "Hallazgo",
+    "PRUEBAS", "Prueba", "Punto",
     "SinPuntos", "con_payload", "puntos",
 ]
 
@@ -137,6 +139,7 @@ ESTRATEGIAS: dict[str, EstrategiaPayloads] = {
         evalua=_eval_traversal,
         severidad="high", confianza="alta",
     ),
+    "sqli_boolean": EstrategiaBooleana(),
 }
 
 

@@ -368,3 +368,16 @@ Una línea por iteración: qué se hizo y por qué eso y no otra cosa.
   estrategia diferencial no caza este caso, no sirve. Es mejor que un test
   inventado porque es una vulnerabilidad real, en un objetivo real, con un
   oraculo conocido.
+- **2026-11-02** — B3 (booleana) escrita y medida contra DOS objetivos
+  reales. Caza el login de Juice Shop —el falso negativo que se habia
+  anotado como criterio de aceptacion— y DVWA low y medium, esta ultima
+  por el par numerico.
+  **Lo que enseño probar de verdad, y que leyendo el codigo no salia:** el
+  barrido estaba fuzzeando PHPSESSID y la cookie `security` de DVWA. Lo
+  primero gastaba un tercio del trafico sin poder encontrar nada; lo
+  segundo CAMBIABA el nivel de dificultad a mitad del escaneo, de modo que
+  se probaba algo distinto de lo que uno creia. Excluidas por nombre
+  conocido: 31 % menos peticiones y la misma deteccion.
+  **La leccion, otra vez la misma:** la herramienta se prueba
+  ejecutandola. Ningun test unitario iba a decirme que el escaner estaba
+  reconfigurando el objetivo mientras lo escaneaba.

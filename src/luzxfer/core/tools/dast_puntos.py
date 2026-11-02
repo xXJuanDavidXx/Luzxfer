@@ -42,6 +42,23 @@ _TIPOS_HOJA = (str, int, float)
 CABECERAS_INYECTABLES = ("user-agent", "referer",
                          "x-forwarded-for", "x-forwarded-host")
 
+# Cookies que NO se fuzzean. Medido contra DVWA: inyectar en PHPSESSID y
+# en la cookie de configuracion se llevaba un tercio del trafico del
+# barrido (36 de 108 peticiones) sin poder encontrar nada util, y la
+# cookie `security` ademas CAMBIABA el nivel de dificultad a mitad del
+# escaneo: se estaba probando algo distinto de lo que el analista creia.
+#
+# La exclusion es por nombre conocido y no «todas las cookies»: una cookie
+# de la aplicacion —un idioma, un carrito, un id de tenant— es superficie
+# legitima y de las mas olvidadas.
+COOKIES_DE_SESION = frozenset({
+    "phpsessid", "jsessionid", "asp.net_sessionid", "aspsessionid",
+    "connect.sid", "laravel_session", "session", "sessionid", "session_id",
+    "sid", "security",
+    # anti-CSRF: mutarlas rompe la peticion sin probar nada
+    "csrftoken", "csrf_token", "_csrf", "xsrf-token", "x-csrf-token",
+})
+
 
 class PayloadNoRepresentable(ValueError):
     """El payload no sobrevive a latin-1, que es como viaja una cabecera.
@@ -190,6 +207,8 @@ def puntos(crudo: str) -> list[Punto]:
             salida.append(Punto(nombre=k, valor=v, donde="cabecera", indice=i))
 
     for i, (k, v) in enumerate(_cookies_de(cabeceras)):
+        if k.lower() in COOKIES_DE_SESION:
+            continue
         salida.append(Punto(nombre=k, valor=v, donde="cookie", indice=i))
 
     # segmentos de la ruta: alimentan traversal y LFI, donde el parametro

